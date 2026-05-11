@@ -34,7 +34,28 @@ cd "${MODEL_DIR}"
 uv sync --extra cu126
 source .venv/bin/activate
 
+NVRTC_LIB_DIR="$(python - <<'PY'
+import importlib.util
+import pathlib
+
+spec = importlib.util.find_spec("nvidia")
+if spec is None or spec.submodule_search_locations is None:
+    raise SystemExit
+
+nvidia_dir = pathlib.Path(next(iter(spec.submodule_search_locations)))
+for path in [nvidia_dir / "cuda_nvrtc" / "lib", *nvidia_dir.glob("cuda_nvrtc*/lib")]:
+    if (path / "libnvrtc.so").exists() or list(path.glob("libnvrtc.so*")):
+        print(path)
+        break
+PY
+)"
+if [[ -n "${NVRTC_LIB_DIR}" ]] && command -v sudo >/dev/null 2>&1; then
+  echo "${NVRTC_LIB_DIR}" | sudo tee /etc/ld.so.conf.d/brev-python-nvrtc.conf >/dev/null
+  sudo ldconfig
+fi
+
 uv pip install \
+  "numpy==1.26.4" \
   "datasets>=4.0.0,<4.2.0" \
   "huggingface-hub[hf-transfer,cli]>=0.34.2,<0.36.0" \
   "av>=15.0.0,<16.0.0" \
@@ -44,7 +65,7 @@ uv pip install \
   "rerun-sdk>=0.24.0,<0.27.0" \
   "deepdiff>=7.0.1,<9.0.0" \
   "torchcodec>=0.2.1,<0.6.0" \
-  wandb
+  "wandb==0.19.11"
 uv pip install --no-deps -e "${LEROBOT_DIR}"
 
 python - <<'PY'
@@ -64,21 +85,23 @@ snapshot_download(
 )
 PY
 
-python - <<PY
+export CHECKPOINT_DIR HF_MODEL_REPO VIDEO_CKPT_NAME VIDEO_CKPT_FILE
+python - <<'PY'
+import os
 import shutil
 from pathlib import Path
 from huggingface_hub import HfApi, hf_hub_download
 
-checkpoint_dir = Path("${CHECKPOINT_DIR}")
-target = checkpoint_dir / "video_backbone" / "${VIDEO_CKPT_NAME}.pt"
+checkpoint_dir = Path(os.environ["CHECKPOINT_DIR"])
+target = checkpoint_dir / "video_backbone" / f"{os.environ['VIDEO_CKPT_NAME']}.pt"
 target.parent.mkdir(parents=True, exist_ok=True)
 
-repo_id = "${HF_MODEL_REPO}"
-requested = "${VIDEO_CKPT_FILE}"
+repo_id = os.environ["HF_MODEL_REPO"]
+requested = os.environ["VIDEO_CKPT_FILE"]
 candidates = [
     requested,
-    "${VIDEO_CKPT_NAME}.pt",
-    f"video_backbone/${target.name}",
+    target.name,
+    f"video_backbone/{target.name}",
 ]
 files = set(HfApi().list_repo_files(repo_id=repo_id))
 filename = next((candidate for candidate in candidates if candidate in files), requested)
@@ -94,13 +117,16 @@ if downloaded.resolve() != target.resolve():
 print(f"Video checkpoint ready at {target}")
 PY
 
-python - <<PY
+export HF_DATASET_REPO
+python - <<'PY'
+import os
+import pathlib
 from huggingface_hub import snapshot_download
 
 snapshot_download(
-    repo_id="${HF_DATASET_REPO}",
+    repo_id=os.environ["HF_DATASET_REPO"],
     repo_type="dataset",
-    local_dir="${HOME}/.cache/mimic_lerobot_t5",
+    local_dir=str(pathlib.Path.home() / ".cache" / "mimic_lerobot_t5"),
     allow_patterns=[".t5_embeddings/*"],
 )
 print("T5 embedding cache warmed.")
