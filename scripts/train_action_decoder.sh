@@ -38,6 +38,14 @@ export PYTHONPATH="${MODEL_DIR}:${ROOT_DIR}/lerobot/src:${PYTHONPATH:-}"
 export TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC="${TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC:-7200}"
 export CUDA_DEVICE_MAX_CONNECTIONS="${CUDA_DEVICE_MAX_CONNECTIONS:-1}"
 export NVTE_FUSED_ATTN="${NVTE_FUSED_ATTN:-0}"
+CUDA_LIB_PATHS=()
+for dir in "${MODEL_DIR}"/.venv/lib/python*/site-packages/nvidia/*/lib; do
+  [[ -d "${dir}" ]] && CUDA_LIB_PATHS+=("${dir}")
+done
+if [[ "${#CUDA_LIB_PATHS[@]}" -gt 0 ]]; then
+  CUDA_LIB_PATHS_JOINED="$(IFS=:; echo "${CUDA_LIB_PATHS[*]}")"
+  export LD_LIBRARY_PATH="${CUDA_LIB_PATHS_JOINED}:${LD_LIBRARY_PATH:-}"
+fi
 export WANDB_MODE
 export WANDB_PROJECT
 if [[ -n "${WANDB_ENTITY}" ]]; then

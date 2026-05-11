@@ -34,7 +34,7 @@ cd "${MODEL_DIR}"
 uv sync --extra cu126
 source .venv/bin/activate
 
-NVRTC_LIB_DIR="$(python - <<'PY'
+CUDA_LIB_DIRS="$(python - <<'PY'
 import importlib.util
 import pathlib
 
@@ -43,14 +43,19 @@ if spec is None or spec.submodule_search_locations is None:
     raise SystemExit
 
 nvidia_dir = pathlib.Path(next(iter(spec.submodule_search_locations)))
-for path in [nvidia_dir / "cuda_nvrtc" / "lib", *nvidia_dir.glob("cuda_nvrtc*/lib")]:
-    if (path / "libnvrtc.so").exists() or list(path.glob("libnvrtc.so*")):
+runtime_dir = nvidia_dir / "cuda_runtime" / "lib"
+if runtime_dir.exists() and not (runtime_dir / "libcudart.so").exists():
+    versioned = sorted(runtime_dir.glob("libcudart.so.*"))
+    if versioned:
+        (runtime_dir / "libcudart.so").symlink_to(versioned[-1].name)
+
+for path in sorted(nvidia_dir.glob("*/lib")):
+    if list(path.glob("*.so*")):
         print(path)
-        break
 PY
 )"
-if [[ -n "${NVRTC_LIB_DIR}" ]] && command -v sudo >/dev/null 2>&1; then
-  echo "${NVRTC_LIB_DIR}" | sudo tee /etc/ld.so.conf.d/brev-python-nvrtc.conf >/dev/null
+if [[ -n "${CUDA_LIB_DIRS}" ]] && command -v sudo >/dev/null 2>&1; then
+  printf "%s\n" "${CUDA_LIB_DIRS}" | sudo tee /etc/ld.so.conf.d/brev-python-cuda.conf >/dev/null
   sudo ldconfig
 fi
 
