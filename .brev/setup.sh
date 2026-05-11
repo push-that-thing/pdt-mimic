@@ -62,7 +62,6 @@ uv pip install \
   "jsonlines>=4.0.0,<5.0.0" \
   "draccus==0.10.0" \
   "gymnasium>=1.1.1,<2.0.0" \
-  "rerun-sdk>=0.24.0,<0.27.0" \
   "deepdiff>=7.0.1,<9.0.0" \
   "torchcodec>=0.2.1,<0.6.0" \
   "wandb==0.19.11"
