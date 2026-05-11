@@ -31,6 +31,7 @@ WANDB_MODE="${WANDB_MODE:-online}"
 WANDB_PROJECT="${WANDB_PROJECT:-vam}"
 WANDB_ENTITY="${WANDB_ENTITY:-}"
 USE_WANDB="${USE_WANDB:-1}"
+SAVE_ITER="${SAVE_ITER:-1000}"
 
 EXPERIMENT="${EXPERIMENT:-w2a_${DATA_CONFIG}_${VIDEO_CKPT}_lr${LR}_layer${LAYER}_bsz${BSZ}}"
 
@@ -59,6 +60,7 @@ args=(
   --config=cosmos_predict2/configs/config.py
   --
   "experiment=${EXPERIMENT}"
+  "checkpoint.save_iter=${SAVE_ITER}"
 )
 
 if [[ "${USE_WANDB}" == "1" ]]; then
@@ -67,6 +69,7 @@ fi
 
 if [[ "${CONFIG_DRYRUN:-0}" == "1" ]]; then
   args=(--nproc_per_node="${NGPU}" --master_port="${MASTER_PORT}" -m scripts.train --config=cosmos_predict2/configs/config.py --dryrun -- "experiment=${EXPERIMENT}")
+  args+=("checkpoint.save_iter=${SAVE_ITER}")
   if [[ "${USE_WANDB}" == "1" ]]; then
     args+=("callbacks=basic_wandb")
   fi
@@ -77,7 +80,7 @@ if [[ "${SMOKE:-0}" == "1" ]]; then
     "trainer.max_iter=${SMOKE_MAX_ITER:-2}"
     "trainer.logging_iter=1"
     "trainer.run_validation=False"
-    "checkpoint.save_iter=99999999"
+    "checkpoint.save_iter=${SMOKE_SAVE_ITER:-99999999}"
   )
 fi
 
@@ -85,6 +88,7 @@ echo "Launching action decoder training:"
 echo "  experiment=${EXPERIMENT}"
 echo "  ngpu=${NGPU}"
 echo "  bsz=${BSZ}"
+echo "  save_iter=${SAVE_ITER}"
 echo "  wandb=${USE_WANDB} (${WANDB_MODE})"
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
