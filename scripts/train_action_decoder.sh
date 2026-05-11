@@ -34,6 +34,7 @@ USE_WANDB="${USE_WANDB:-1}"
 SAVE_ITER="${SAVE_ITER:-1000}"
 
 EXPERIMENT="${EXPERIMENT:-w2a_${DATA_CONFIG}_${VIDEO_CKPT}_lr${LR}_layer${LAYER}_bsz${BSZ}}"
+JOB_NAME="${JOB_NAME:-}"
 
 export PYTHONPATH="${MODEL_DIR}:${ROOT_DIR}/lerobot/src:${PYTHONPATH:-}"
 export TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC="${TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC:-7200}"
@@ -66,12 +67,18 @@ args=(
 if [[ "${USE_WANDB}" == "1" ]]; then
   args+=("callbacks=basic_wandb")
 fi
+if [[ -n "${JOB_NAME}" ]]; then
+  args+=("job.name=${JOB_NAME}")
+fi
 
 if [[ "${CONFIG_DRYRUN:-0}" == "1" ]]; then
   args=(--nproc_per_node="${NGPU}" --master_port="${MASTER_PORT}" -m scripts.train --config=cosmos_predict2/configs/config.py --dryrun -- "experiment=${EXPERIMENT}")
   args+=("checkpoint.save_iter=${SAVE_ITER}")
   if [[ "${USE_WANDB}" == "1" ]]; then
     args+=("callbacks=basic_wandb")
+  fi
+  if [[ -n "${JOB_NAME}" ]]; then
+    args+=("job.name=${JOB_NAME}")
   fi
 fi
 
@@ -83,12 +90,16 @@ if [[ "${SMOKE:-0}" == "1" ]]; then
     "checkpoint.save_iter=${SMOKE_SAVE_ITER:-99999999}"
   )
 fi
+args+=("$@")
 
 echo "Launching action decoder training:"
 echo "  experiment=${EXPERIMENT}"
 echo "  ngpu=${NGPU}"
 echo "  bsz=${BSZ}"
 echo "  save_iter=${SAVE_ITER}"
+if [[ -n "${JOB_NAME}" ]]; then
+  echo "  job_name=${JOB_NAME}"
+fi
 echo "  wandb=${USE_WANDB} (${WANDB_MODE})"
 
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
