@@ -11,7 +11,7 @@ HF_TOKEN="${HF_TOKEN:-}"
 HF_DATASET_REPO="${HF_DATASET_REPO:-push-that-thing/task_1}"
 HF_MODEL_REPO="${HF_MODEL_REPO:-push-that-thing/model}"
 VIDEO_CKPT_NAME="${VIDEO_CKPT_NAME:-v2w_push_that_thing}"
-VIDEO_CKPT_FILE="${VIDEO_CKPT_FILE:-video_backbone/${VIDEO_CKPT_NAME}.pt}"
+VIDEO_CKPT_FILE="${VIDEO_CKPT_FILE:-checkpoints/model/iter_000000500_fused.pt}"
 LEROBOT_REF="${LEROBOT_REF:-v0.4.0}"
 
 if [[ -z "${HF_TOKEN}" ]]; then
