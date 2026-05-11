@@ -5,6 +5,19 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MIMIC_DIR="${ROOT_DIR}/mimic-video"
 MODEL_DIR="${MIMIC_DIR}/model"
 
+WANDB_CONFIG="${WANDB_CONFIG:-${ROOT_DIR}/configs/wandb/action_decoder.env}"
+if [[ -n "${WANDB_CONFIG}" ]]; then
+  if [[ -f "${WANDB_CONFIG}" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "${WANDB_CONFIG}"
+    set +a
+  else
+    echo "W&B config file not found: ${WANDB_CONFIG}" >&2
+    exit 1
+  fi
+fi
+
 VIDEO_CKPT="${VIDEO_CKPT:-v2w_push_that_thing}"
 DATA_CONFIG="${DATA_CONFIG:-so101_lerobot}"
 LR="${LR:-1.000e-04}"
@@ -32,6 +45,8 @@ WANDB_PROJECT="${WANDB_PROJECT:-vam}"
 WANDB_ENTITY="${WANDB_ENTITY:-}"
 USE_WANDB="${USE_WANDB:-1}"
 SAVE_ITER="${SAVE_ITER:-1000}"
+GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-1}"
+MICRO_BSZ="${MICRO_BSZ:-${TRAIN_BSZ:-${BSZ}}}"
 
 EXPERIMENT="${EXPERIMENT:-w2a_${DATA_CONFIG}_${VIDEO_CKPT}_lr${LR}_layer${LAYER}_bsz${BSZ}}"
 JOB_NAME="${JOB_NAME:-}"
@@ -62,6 +77,7 @@ args=(
   --
   "experiment=${EXPERIMENT}"
   "checkpoint.save_iter=${SAVE_ITER}"
+  "trainer.grad_accum_iter=${GRAD_ACCUM_ITER}"
 )
 
 if [[ "${USE_WANDB}" == "1" ]]; then
@@ -70,15 +86,22 @@ fi
 if [[ -n "${JOB_NAME}" ]]; then
   args+=("job.name=${JOB_NAME}")
 fi
+if [[ "${MICRO_BSZ}" != "${BSZ}" ]]; then
+  args+=("dataloader_train.batch_size=${MICRO_BSZ}")
+fi
 
 if [[ "${CONFIG_DRYRUN:-0}" == "1" ]]; then
   args=(--nproc_per_node="${NGPU}" --master_port="${MASTER_PORT}" -m scripts.train --config=cosmos_predict2/configs/config.py --dryrun -- "experiment=${EXPERIMENT}")
   args+=("checkpoint.save_iter=${SAVE_ITER}")
+  args+=("trainer.grad_accum_iter=${GRAD_ACCUM_ITER}")
   if [[ "${USE_WANDB}" == "1" ]]; then
     args+=("callbacks=basic_wandb")
   fi
   if [[ -n "${JOB_NAME}" ]]; then
     args+=("job.name=${JOB_NAME}")
+  fi
+  if [[ "${MICRO_BSZ}" != "${BSZ}" ]]; then
+    args+=("dataloader_train.batch_size=${MICRO_BSZ}")
   fi
 fi
 
@@ -95,8 +118,12 @@ args+=("$@")
 echo "Launching action decoder training:"
 echo "  experiment=${EXPERIMENT}"
 echo "  ngpu=${NGPU}"
-echo "  bsz=${BSZ}"
+echo "  registered_bsz=${BSZ}"
+echo "  micro_bsz=${MICRO_BSZ}"
+echo "  grad_accum_iter=${GRAD_ACCUM_ITER}"
+echo "  effective_bsz=$((MICRO_BSZ * NGPU * GRAD_ACCUM_ITER))"
 echo "  save_iter=${SAVE_ITER}"
+echo "  wandb_config=${WANDB_CONFIG}"
 if [[ -n "${JOB_NAME}" ]]; then
   echo "  job_name=${JOB_NAME}"
 fi
