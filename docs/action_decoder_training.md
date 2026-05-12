@@ -353,6 +353,56 @@ find mimic-video/model/checkpoints/vam/so101 -path '*/checkpoints/model/*.pt' | 
 
 ## How to Tune Based on Observations
 
+### Next Run: 10% Validation and Early Stopping
+
+If `push-that-thing/task_1` has 204 episodes, use a 10% validation split for
+the next clean run. The dataset wrapper will hold out `ceil(204 * 0.10) = 21`
+episodes with the configured seed, train on the remaining episodes, and run
+validation on the held-out split.
+
+Use loss-only validation for training-time early stopping. The full validation
+path also samples actions across video-noise settings and is too expensive for
+routine in-training checks on one A100.
+
+Recommended launch:
+
+```bash
+cd ~/workspace/pdt-mimic
+tmux new -s action_decoder_val
+
+source mimic-video/model/.venv/bin/activate
+
+NGPU=1 \
+BSZ=1 \
+MICRO_BSZ=2 \
+GRAD_ACCUM_ITER=8 \
+VAL_RATIO=0.10 \
+EARLY_STOPPING=1 \
+EARLY_STOP_PATIENCE=5 \
+EARLY_STOP_MIN_DELTA=0.05 \
+EARLY_STOP_START_ITER=2000 \
+VALIDATION_ITER=500 \
+MAX_VAL_ITER=64 \
+SAVE_ITER=250 \
+JOB_NAME=w2a_so101_a100_normfix_bsz2_accum8_val10 \
+bash scripts/train_action_decoder.sh trainer.max_iter=20000 2>&1 | tee -a /tmp/action_decoder_val10.log
+```
+
+Validation settings:
+
+```text
+VAL_RATIO=0.10              # hold out about 10% of episodes
+VALIDATION_MODE=loss_only   # implied by EARLY_STOPPING=1
+VALIDATION_ITER=500         # check val loss every 500 optimizer steps
+MAX_VAL_ITER=64             # cap validation batches so training keeps moving
+EARLY_STOP_PATIENCE=5       # stop after 5 non-improving validations
+EARLY_STOP_MIN_DELTA=0.05   # require at least this much val/loss improvement
+EARLY_STOP_START_ITER=2000  # do not stop during the very early phase
+```
+
+For a slower but more complete validation estimate, increase `MAX_VAL_ITER` or
+remove it. Do this only if the extra runtime is acceptable.
+
 ### If It OOMs
 
 Use safer memory settings:
@@ -462,4 +512,3 @@ The pipeline is verified when:
 5. Training runs for a smoke test and writes a checkpoint.
 6. W&B logs to the team project.
 7. A real run saves intermediate checkpoints at the configured interval.
-

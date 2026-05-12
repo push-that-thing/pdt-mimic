@@ -47,6 +47,16 @@ USE_WANDB="${USE_WANDB:-1}"
 SAVE_ITER="${SAVE_ITER:-1000}"
 GRAD_ACCUM_ITER="${GRAD_ACCUM_ITER:-1}"
 MICRO_BSZ="${MICRO_BSZ:-${TRAIN_BSZ:-${BSZ}}}"
+VAL_RATIO="${VAL_RATIO:-}"
+VAL_EPISODES="${VAL_EPISODES:-}"
+RUN_VALIDATION="${RUN_VALIDATION:-}"
+VALIDATION_MODE="${VALIDATION_MODE:-}"
+VALIDATION_ITER="${VALIDATION_ITER:-}"
+MAX_VAL_ITER="${MAX_VAL_ITER:-}"
+EARLY_STOPPING="${EARLY_STOPPING:-0}"
+EARLY_STOP_PATIENCE="${EARLY_STOP_PATIENCE:-5}"
+EARLY_STOP_MIN_DELTA="${EARLY_STOP_MIN_DELTA:-0.0}"
+EARLY_STOP_START_ITER="${EARLY_STOP_START_ITER:-0}"
 
 EXPERIMENT="${EXPERIMENT:-w2a_${DATA_CONFIG}_${VIDEO_CKPT}_lr${LR}_layer${LAYER}_bsz${BSZ}}"
 JOB_NAME="${JOB_NAME:-}"
@@ -80,7 +90,13 @@ args=(
   "trainer.grad_accum_iter=${GRAD_ACCUM_ITER}"
 )
 
-if [[ "${USE_WANDB}" == "1" ]]; then
+if [[ "${EARLY_STOPPING}" == "1" ]]; then
+  if [[ "${USE_WANDB}" == "1" ]]; then
+    args+=("callbacks=basic_wandb_earlystop")
+  else
+    args+=("callbacks=basic_earlystop")
+  fi
+elif [[ "${USE_WANDB}" == "1" ]]; then
   args+=("callbacks=basic_wandb")
 fi
 if [[ -n "${JOB_NAME}" ]]; then
@@ -89,12 +105,49 @@ fi
 if [[ "${MICRO_BSZ}" != "${BSZ}" ]]; then
   args+=("dataloader_train.batch_size=${MICRO_BSZ}")
 fi
+if [[ -n "${VAL_RATIO}" ]]; then
+  args+=("dataloader_train.dataset.val_ratio=${VAL_RATIO}")
+  args+=("dataloader_val.dataset.val_ratio=${VAL_RATIO}")
+fi
+if [[ -n "${VAL_EPISODES}" ]]; then
+  args+=("dataloader_train.dataset.num_val_episodes=${VAL_EPISODES}")
+  args+=("dataloader_val.dataset.num_val_episodes=${VAL_EPISODES}")
+fi
+if [[ "${EARLY_STOPPING}" != "1" ]]; then
+  if [[ -n "${RUN_VALIDATION}" ]]; then
+    args+=("trainer.run_validation=${RUN_VALIDATION}")
+  fi
+  if [[ -n "${VALIDATION_MODE}" ]]; then
+    args+=("model.config.validation_mode=${VALIDATION_MODE}")
+  fi
+  if [[ -n "${VALIDATION_ITER}" ]]; then
+    args+=("trainer.validation_iter=${VALIDATION_ITER}")
+  fi
+  if [[ -n "${MAX_VAL_ITER}" ]]; then
+    args+=("trainer.max_val_iter=${MAX_VAL_ITER}")
+  fi
+fi
+if [[ "${EARLY_STOPPING}" == "1" ]]; then
+  args+=("trainer.run_validation=True")
+  args+=("model.config.validation_mode=${VALIDATION_MODE:-loss_only}")
+  args+=("trainer.validation_iter=${VALIDATION_ITER:-500}")
+  args+=("trainer.max_val_iter=${MAX_VAL_ITER:-64}")
+  args+=("trainer.callbacks.early_stopping.patience=${EARLY_STOP_PATIENCE}")
+  args+=("trainer.callbacks.early_stopping.min_delta=${EARLY_STOP_MIN_DELTA}")
+  args+=("trainer.callbacks.early_stopping.start_iter=${EARLY_STOP_START_ITER}")
+fi
 
 if [[ "${CONFIG_DRYRUN:-0}" == "1" ]]; then
   args=(--nproc_per_node="${NGPU}" --master_port="${MASTER_PORT}" -m scripts.train --config=cosmos_predict2/configs/config.py --dryrun -- "experiment=${EXPERIMENT}")
   args+=("checkpoint.save_iter=${SAVE_ITER}")
   args+=("trainer.grad_accum_iter=${GRAD_ACCUM_ITER}")
-  if [[ "${USE_WANDB}" == "1" ]]; then
+  if [[ "${EARLY_STOPPING}" == "1" ]]; then
+    if [[ "${USE_WANDB}" == "1" ]]; then
+      args+=("callbacks=basic_wandb_earlystop")
+    else
+      args+=("callbacks=basic_earlystop")
+    fi
+  elif [[ "${USE_WANDB}" == "1" ]]; then
     args+=("callbacks=basic_wandb")
   fi
   if [[ -n "${JOB_NAME}" ]]; then
@@ -102,6 +155,37 @@ if [[ "${CONFIG_DRYRUN:-0}" == "1" ]]; then
   fi
   if [[ "${MICRO_BSZ}" != "${BSZ}" ]]; then
     args+=("dataloader_train.batch_size=${MICRO_BSZ}")
+  fi
+  if [[ -n "${VAL_RATIO}" ]]; then
+    args+=("dataloader_train.dataset.val_ratio=${VAL_RATIO}")
+    args+=("dataloader_val.dataset.val_ratio=${VAL_RATIO}")
+  fi
+  if [[ -n "${VAL_EPISODES}" ]]; then
+    args+=("dataloader_train.dataset.num_val_episodes=${VAL_EPISODES}")
+    args+=("dataloader_val.dataset.num_val_episodes=${VAL_EPISODES}")
+  fi
+  if [[ "${EARLY_STOPPING}" != "1" ]]; then
+    if [[ -n "${RUN_VALIDATION}" ]]; then
+      args+=("trainer.run_validation=${RUN_VALIDATION}")
+    fi
+    if [[ -n "${VALIDATION_MODE}" ]]; then
+      args+=("model.config.validation_mode=${VALIDATION_MODE}")
+    fi
+    if [[ -n "${VALIDATION_ITER}" ]]; then
+      args+=("trainer.validation_iter=${VALIDATION_ITER}")
+    fi
+    if [[ -n "${MAX_VAL_ITER}" ]]; then
+      args+=("trainer.max_val_iter=${MAX_VAL_ITER}")
+    fi
+  fi
+  if [[ "${EARLY_STOPPING}" == "1" ]]; then
+    args+=("trainer.run_validation=True")
+    args+=("model.config.validation_mode=${VALIDATION_MODE:-loss_only}")
+    args+=("trainer.validation_iter=${VALIDATION_ITER:-500}")
+    args+=("trainer.max_val_iter=${MAX_VAL_ITER:-64}")
+    args+=("trainer.callbacks.early_stopping.patience=${EARLY_STOP_PATIENCE}")
+    args+=("trainer.callbacks.early_stopping.min_delta=${EARLY_STOP_MIN_DELTA}")
+    args+=("trainer.callbacks.early_stopping.start_iter=${EARLY_STOP_START_ITER}")
   fi
 fi
 
@@ -123,6 +207,18 @@ echo "  micro_bsz=${MICRO_BSZ}"
 echo "  grad_accum_iter=${GRAD_ACCUM_ITER}"
 echo "  effective_bsz=$((MICRO_BSZ * NGPU * GRAD_ACCUM_ITER))"
 echo "  save_iter=${SAVE_ITER}"
+if [[ -n "${VAL_RATIO}" ]]; then
+  echo "  val_ratio=${VAL_RATIO}"
+fi
+if [[ -n "${VAL_EPISODES}" ]]; then
+  echo "  val_episodes=${VAL_EPISODES}"
+fi
+if [[ "${EARLY_STOPPING}" == "1" ]]; then
+  echo "  validation_mode=${VALIDATION_MODE:-loss_only}"
+  echo "  validation_iter=${VALIDATION_ITER:-500}"
+  echo "  max_val_iter=${MAX_VAL_ITER:-64}"
+  echo "  early_stopping=1 (patience=${EARLY_STOP_PATIENCE}, min_delta=${EARLY_STOP_MIN_DELTA}, start_iter=${EARLY_STOP_START_ITER})"
+fi
 echo "  wandb_config=${WANDB_CONFIG}"
 if [[ -n "${JOB_NAME}" ]]; then
   echo "  job_name=${JOB_NAME}"
