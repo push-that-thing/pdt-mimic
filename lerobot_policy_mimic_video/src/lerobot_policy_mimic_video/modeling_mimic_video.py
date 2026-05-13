@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import collections
+import hashlib
 import json
 import logging
 import sys
@@ -35,6 +36,7 @@ class MimicVideoPolicy(PreTrainedPolicy):
         self.config = config
         self._dummy = nn.Parameter(torch.empty(0), requires_grad=False)
         self.model: nn.Module | None = None
+        self._prompt_embedding: torch.Tensor | None = None
         self._image_history: collections.deque[torch.Tensor] = collections.deque(maxlen=config.obs_image_horizon)
         self._action_queue: collections.deque[torch.Tensor] = collections.deque()
         self._chunks_generated = 0
@@ -96,6 +98,9 @@ class MimicVideoPolicy(PreTrainedPolicy):
             mimic_config.model.config.video_pipe_config.guardrail_config.enabled = False
         mimic_config.model.config.video_dit_path = str(video_checkpoint)
 
+        if not self.config.use_text_encoder:
+            self._prompt_embedding = self._load_prompt_embedding(dtype=dtype, device=device)
+
         video_pipe = self._load_video_pipe(
             Video2WorldPipeline,
             mimic_config,
@@ -141,10 +146,54 @@ class MimicVideoPolicy(PreTrainedPolicy):
             "torch_dtype": dtype,
             "load_ema_to_reg": False,
         }
+        use_te = bool(self.config.use_text_encoder)
         try:
-            return video_pipe_cls.from_config(**kwargs, use_text_encoder=True)
+            return video_pipe_cls.from_config(**kwargs, use_text_encoder=use_te)
         except TypeError:
+            if not use_te:
+                raise RuntimeError(
+                    "Cosmos Video2WorldPipeline.from_config does not accept use_text_encoder=False; "
+                    "cannot skip T5 loading on this build."
+                )
             return video_pipe_cls.from_config(**kwargs)
+
+    def _load_prompt_embedding(self, *, dtype: torch.dtype, device: str) -> torch.Tensor:
+        task = self.config.task
+        explicit = self.config.prompt_embedding_path
+        if explicit:
+            path = self._resolve_path(explicit, expect_exists=True)
+        else:
+            cache_dir = Path(self.config.prompt_embedding_cache_dir or "~/.cache/mimic_lerobot_t5/.t5_embeddings").expanduser()
+            if not cache_dir.is_dir():
+                raise FileNotFoundError(
+                    f"T5 embedding cache dir not found: {cache_dir}. "
+                    "Run data_preprocessing/action/precompute_t5_lerobot.py first, "
+                    "or set use_text_encoder=True / prompt_embedding_path."
+                )
+            cache_key = hashlib.sha256(str(sorted([task])).encode()).hexdigest()
+            preferred = cache_dir / f"{cache_key}.npz"
+            if preferred.exists():
+                path = preferred
+            else:
+                path = None
+                for cand in sorted(cache_dir.glob("*.npz")):
+                    with np.load(cand, allow_pickle=False) as data:
+                        if task in data.files:
+                            path = cand
+                            break
+                if path is None:
+                    raise FileNotFoundError(
+                        f"No T5 embedding for task {task!r} in {cache_dir}. "
+                        f"Tried hash {cache_key}.npz and scanned all .npz files."
+                    )
+
+        with np.load(path, allow_pickle=False) as data:
+            if task not in data.files:
+                raise KeyError(f"Task {task!r} not found in {path}; keys: {list(data.files)}")
+            emb = np.asarray(data[task])
+        tensor = torch.as_tensor(emb).to(device=device, dtype=dtype)
+        LOGGER.info("Loaded precomputed T5 embedding from %s (shape=%s)", path, tuple(tensor.shape))
+        return tensor
 
     def _load_statistics(self, *, mimic_config, instantiate) -> dict[str, dict[str, np.ndarray]]:
         stats_path = self._find_statistics_path()
@@ -203,6 +252,7 @@ class MimicVideoPolicy(PreTrainedPolicy):
             input_vid=input_vid,
             state_B_HO_O=state,
             prompt=prompt,
+            prompt_embedding=self._prompt_embedding,
             num_sampling_step=self.config.num_sampling_step,
             stop_after_step=self.config.stop_after_step,
             seed=seed,

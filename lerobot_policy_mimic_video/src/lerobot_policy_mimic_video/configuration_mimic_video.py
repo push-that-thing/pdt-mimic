@@ -27,7 +27,10 @@ class MimicVideoConfig(PreTrainedConfig):
     # LeRobot/robot-facing keys.
     camera_key: str = "observation.images.front"
     state_key: str = "observation.state"
-    task: str = "push the object"
+    task: str = (
+        "Push the white object to the right into the goal white circle. "
+        "Stay within the two white lines."
+    )
     observation_rename_map: dict[str, str] = field(default_factory=dict)
 
     # MIMIC timing and tensor contract.
@@ -69,6 +72,13 @@ class MimicVideoConfig(PreTrainedConfig):
     torch_dtype: str = "bfloat16"
     load_on_init: bool = True
     disable_guardrails: bool = True
+
+    # T5 text-encoder handling. On low-VRAM GPUs (e.g. 12 GB) the T5-XXL
+    # encoder does not fit alongside the cosmos backbone, so the wrapper can
+    # skip it entirely and inject a precomputed prompt embedding instead.
+    use_text_encoder: bool = True
+    prompt_embedding_path: str | None = None
+    prompt_embedding_cache_dir: str | None = "~/.cache/mimic_lerobot_t5/.t5_embeddings"
 
     # The base config also owns this field; keep it identity by default because
     # the MIMIC world-to-action pipeline normalizes/unnormalizes internally.
