@@ -1,0 +1,17 @@
+# Additional packages required to deploy a trained MimicVideo / VAM SO-101
+# checkpoint on a real LeRobot SO-101 arm.
+#
+# These are layered on top of the mimic-video Python 3.10 + cu126 venv that
+# `.brev/setup.sh` creates. Install with:
+#
+#   source mimic-video/model/.venv/bin/activate
+#   uv pip install -r requirements-deploy.txt
+#
+# (Or run `bash scripts/deploy_setup.sh` which does this for you.)
+#
+# We pin only what is strictly required for hardware I/O. opencv, torch,
+# numpy, etc. are already provided by mimic-video/model/pyproject.toml.
+
+# Feetech servo backend for SO-101 motors (used by lerobot 0.5 SO101Follower).
+feetech-servo-sdk>=1.0,<2.0
+pyserial>=3.5
