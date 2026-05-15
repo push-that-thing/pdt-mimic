@@ -233,23 +233,33 @@ action/lowdim_concat (90, 6) float32
 
 ## Model Parameters
 
-Current SO-101 action decoder parameters:
+Current SO-101 action decoder parameters (~75M total params):
 
 ```text
 max_horizon = 91
 in_channels = 6
 out_channels = 6
-model_channels = 256
-num_blocks = 7
-num_heads = 4
-mlp_ratio = 3.0
+model_channels = 512
+num_blocks = 12
+num_heads = 8
+mlp_ratio = 4.0
 crossattn_emb_channels = 2048
-use_adaln_lora = False
-adaln_lora_dim = 0
-pair_timestep_feature_rank = 256
+use_adaln_lora = True
+adaln_lora_dim = 128
+pair_timestep_feature_rank = 512
 atten_backend = flash_attn_no_cp
 sac_config = none
 ```
+
+Defined in `mimic-video/model/cosmos_predict2/configs/defaults/world2action_pipe.py`,
+the `"so101"` entry of `ACTION_DECODER_NETS`. Matched by data_configs that
+start with `"so101"` (e.g., `so101_lerobot`).
+
+Earlier chain runs (`w2a_so101_h100_chain_bsz2_accum8_full204` on HF) used a
+much smaller config (~17M params, `model_channels=256`, `num_blocks=7`,
+`mlp_ratio=3`, `use_adaln_lora=False`). Those checkpoints are **not
+compatible** with the current 75M architecture — any retraining from a fresh
+session starts the action decoder from scratch.
 
 Data horizon:
 
@@ -551,15 +561,38 @@ keeping the same `JOB_NAME` and pulling the saved state down from HF.
 ### Per-Session Budget on 1x H100 PCIe
 
 ```text
-Iter time (steady state)     ~19.3 s/iter
+Iter time (steady state)     ~22-26 s/iter  # 75M action decoder
+                             ~19.3 s/iter   # legacy 17M action decoder
 Stats compute (first time)   ~30 min        # cached after first run
 First training iter warmup   ~30 s extra
-Iters per 7-hour session     ~1100-1200     # after subtracting overhead
+Iters per 7-hour session     ~850-950       # at 75M, after subtracting overhead
+                             ~1100-1200     # at legacy 17M
 Eval (32 samples, 2 stops)   ~10-12 min     # slows training while running
 ```
 
-Plan for 4-8 sessions to reach deployable. See "Single Task Convergence
-Expectations" below for the reasoning.
+For the 75M model targeted at **10k iters**, plan for ~**10 sessions of 7 hours
+each**. See "Single Task Convergence Expectations" below for the model-quality
+side of that estimate.
+
+#### Checkpoint disk math at 75M
+
+Per saved iter you write `model + optim + scheduler + trainer` totaling
+~300 MB (vs ~100 MB at 17M). With `SAVE_ITER=50` over 10k iters that's 200
+checkpoints × 300 MB = **~60 GB on disk and on HF**.
+
+To keep this manageable, either:
+
+- Bump `SAVE_ITER=100` or `SAVE_ITER=200` (20-50 checkpoints total over 10k
+  iters), or
+- Periodically prune older checkpoints between sessions:
+
+  ```bash
+  # Keep every 4th checkpoint
+  find $SRC/checkpoints -name 'iter_*.pt' \
+    | sort | awk -F'iter_|.pt' 'NR%4 != 0' | xargs rm
+  ```
+
+The recommended setting going forward is `SAVE_ITER=100`.
 
 ### Resume Flow (Session N+1, N ≥ 1)
 
