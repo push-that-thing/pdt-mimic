@@ -26,6 +26,57 @@ During setup it is copied to:
 mimic-video/model/checkpoints/video_backbone/v2w_push_that_thing.pt
 ```
 
+### Alternative: Combined task1+task2 LoRA backbone (preferred for new runs)
+
+A LoRA-fine-tuned variant trained on combined `task_1`+`task_2` data lives at:
+
+```text
+push-that-thing/cosmos-task1-task2:posttraining/video2world/v2w_push_combined_lora_rank32_lr1.778e-04_bsz32/checkpoints/
+  model/iter_000002500.pt        # unfused — needs fusion step before use
+```
+
+These checkpoints are **LoRA-only** (separate `lora_A`/`lora_B` adapters), not
+fused into the base weights. The action-decoder pipeline expects a fused
+checkpoint, so the setup script auto-fuses on download when the requested
+filename ends in `_fused.pt`:
+
+1. Looks for `iter_NNN_fused.pt` on HF — not found in the combined repo
+2. Falls back to `iter_NNN.pt` (unfused), downloads it
+3. Runs `mimic-video/model/scripts/fuse_lora_ckpt.py` to produce
+   `iter_NNN_fused.pt` (ALPHA=32 hardcoded, matches the LoRA training)
+4. Moves the fused output to the expected video-backbone path
+5. Cleans up the unfused source (saves ~4 GB)
+
+To use this backbone, set these env vars before `bash .brev/setup.sh`:
+
+```bash
+export HF_MODEL_REPO=push-that-thing/cosmos-task1-task2
+export VIDEO_CKPT_FILE=posttraining/video2world/v2w_push_combined_lora_rank32_lr1.778e-04_bsz32/checkpoints/model/iter_000002500_fused.pt
+export VIDEO_CKPT_NAME=v2w_push_combined_lora_rank32_lr1.778e-04_bsz32_iter_000002500_fused
+```
+
+Setup will download the ~4 GB unfused source, fuse it, and leave the resulting
+~3.9 GB `<VIDEO_CKPT_NAME>.pt` in
+`mimic-video/model/checkpoints/video_backbone/`. Fusion takes ~30-60 seconds
+on H100.
+
+Then for training, pass the same name as `VIDEO_CKPT`:
+
+```bash
+VIDEO_CKPT=v2w_push_combined_lora_rank32_lr1.778e-04_bsz32_iter_000002500_fused \
+JOB_NAME=w2a_so101_combined_lora32_iter2500 \
+bash scripts/train_action_decoder.sh trainer.max_iter=20000
+```
+
+**Important:** swapping backbones changes the layer-20 feature distribution
+the action decoder is conditioned on. Previously-trained action decoder
+weights (e.g., iter_1000 of the `v2w_push_that_thing` chain run) will not
+transfer. **A new backbone requires training the action decoder from
+scratch** with a fresh `JOB_NAME`.
+
+The previous chain run's stats cache CAN be reused — the normalizer
+statistics depend on the dataset only, not the backbone.
+
 ## Required Branches
 
 Use the `jessie` branch in both repos:

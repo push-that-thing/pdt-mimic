@@ -89,10 +89,12 @@ snapshot_download(
 )
 PY
 
-export CHECKPOINT_DIR HF_MODEL_REPO VIDEO_CKPT_NAME VIDEO_CKPT_FILE
+export CHECKPOINT_DIR HF_MODEL_REPO VIDEO_CKPT_NAME VIDEO_CKPT_FILE MIMIC_DIR
 python - <<'PY'
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 from huggingface_hub import HfApi, hf_hub_download
 
@@ -108,7 +110,26 @@ candidates = [
     f"video_backbone/{target.name}",
 ]
 files = set(HfApi().list_repo_files(repo_id=repo_id))
-filename = next((candidate for candidate in candidates if candidate in files), requested)
+filename = next((c for c in candidates if c in files), None)
+
+needs_fuse = False
+if filename is None and requested.endswith("_fused.pt"):
+    # Fused version not on HF — fall back to unfused source and fuse locally.
+    unfused = requested[: -len("_fused.pt")] + ".pt"
+    unfused_name = Path(unfused).name
+    unfused_candidates = [
+        unfused,
+        unfused_name,
+        f"video_backbone/{unfused_name}",
+    ]
+    filename = next((c for c in unfused_candidates if c in files), None)
+    if filename is not None:
+        needs_fuse = True
+
+if filename is None:
+    raise SystemExit(
+        f"Could not find '{requested}' or any unfused source in repo '{repo_id}'."
+    )
 
 path = hf_hub_download(
     repo_id=repo_id,
@@ -116,8 +137,21 @@ path = hf_hub_download(
     local_dir=str(checkpoint_dir),
 )
 downloaded = Path(path)
-if downloaded.resolve() != target.resolve():
+
+if needs_fuse:
+    fuse_script = Path(os.environ["MIMIC_DIR"]) / "model" / "scripts" / "fuse_lora_ckpt.py"
+    print(f"Fusing LoRA adapters: {downloaded}")
+    subprocess.run([sys.executable, str(fuse_script), str(downloaded)], check=True)
+    fused_local = downloaded.with_name(downloaded.stem + "_fused.pt")
+    if fused_local.resolve() != target.resolve():
+        shutil.copyfile(fused_local, target)
+    # Free disk: drop the unfused source and the original fused output.
+    downloaded.unlink(missing_ok=True)
+    if fused_local.resolve() != target.resolve():
+        fused_local.unlink(missing_ok=True)
+elif downloaded.resolve() != target.resolve():
     shutil.copyfile(downloaded, target)
+
 print(f"Video checkpoint ready at {target}")
 PY
 
