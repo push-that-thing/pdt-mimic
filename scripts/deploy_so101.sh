@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Deploy the MIMIC video SO-101 policy on the actual robot.
+#
+# Defaults match comands.txt (so101_follower on /dev/ttyACM0, front camera at
+# index 0, 640x480@30, no teleop). Every value is env-overridable.
+#
+# Usage:
+#   bash scripts/deploy_so101.sh                        # 1 short rollout, no recording
+#   ROBOT_PORT=/dev/ttyACM1 bash scripts/deploy_so101.sh
+#   NUM_EPISODES=5 EPISODE_TIME_S=20 bash scripts/deploy_so101.sh
+#   DRY_RUN=1 bash scripts/deploy_so101.sh              # print the command only
+
+set -eo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=mimic_env.sh
+source "$SCRIPT_DIR/mimic_env.sh"
+
+ROBOT_PORT="${ROBOT_PORT:-/dev/ttyACM0}"
+ROBOT_ID="${ROBOT_ID:-my_awesome_follower_arm}"
+CAMERA_IDX="${CAMERA_IDX:-0}"
+TASK_PROMPT="${TASK_PROMPT:-Push the white object to the right into the goal white circle. Stay within the two white lines.}"
+
+# Output dataset (lerobot-record requires a dataset.repo_id even for inference rollouts).
+DATASET_REPO="${DATASET_REPO:-local/mimic_so101_eval}"
+DATASET_ROOT="${DATASET_ROOT:-$HF_HOME/eval_rollouts}"
+NUM_EPISODES="${NUM_EPISODES:-1}"
+EPISODE_TIME_S="${EPISODE_TIME_S:-15}"
+FPS="${FPS:-30}"
+
+CMD=(
+  python "$SCRIPT_DIR/lerobot_record_mimic.py"
+  --robot.type=so101_follower
+  --robot.port="$ROBOT_PORT"
+  --robot.id="$ROBOT_ID"
+  --robot.cameras="{ front: {type: opencv, index_or_path: $CAMERA_IDX, width: 640, height: 480, fps: $FPS}}"
+  --display_data=true
+  --policy.type=mimic_video
+  --policy.device=cuda
+  --policy.use_text_encoder=false
+  --policy.task="$TASK_PROMPT"
+  --dataset.repo_id="$DATASET_REPO"
+  --dataset.root="$DATASET_ROOT"
+  --dataset.push_to_hub=false
+  --dataset.num_episodes="$NUM_EPISODES"
+  --dataset.episode_time_s="$EPISODE_TIME_S"
+  --dataset.single_task="$TASK_PROMPT"
+  --dataset.fps="$FPS"
+)
+
+echo "+ ${CMD[*]}"
+if [[ "${DRY_RUN:-0}" == "1" ]]; then
+  exit 0
+fi
+
+exec "${CMD[@]}"

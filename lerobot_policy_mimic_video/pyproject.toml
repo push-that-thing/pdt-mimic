@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lerobot_policy_mimic_video"
+version = "0.1.0"
+description = "LeRobot bring-your-own-policy wrapper for the MIMIC video SO101 policy."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "torch",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
