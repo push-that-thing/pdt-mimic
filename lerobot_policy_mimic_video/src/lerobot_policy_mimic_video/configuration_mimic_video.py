@@ -47,11 +47,18 @@ class MimicVideoConfig(PreTrainedConfig):
     # MIMIC model/config paths. Relative paths are resolved from the current
     # working directory and then from this repository root.
     mimic_model_dir: str = "mimic-video/model"
-    experiment_name: str = "w2a_so101_lerobot_v2w_push_that_thing_lr1.000e-04_layer20_bsz1"
-    video_checkpoint_path: str = "mimic-video/model/checkpoints/video_backbone/v2w_push_that_thing.pt"
+    experiment_name: str = (
+        "w2a_so101_lerobot_v2w_push_combined_lora_rank32_lr1.778e-04_bsz32_"
+        "iter_000002500_fused_lr1.000e-04_layer20_bsz1"
+    )
+    video_checkpoint_path: str = (
+        "mimic-video/model/checkpoints/video_backbone/"
+        "v2w_push_combined_lora_rank32_lr1.778e-04_bsz32_iter_000002500_fused.pt"
+    )
     action_checkpoint_path: str = (
         "mimic-video/model/checkpoints/vam/so101/"
-        "w2a_so101_h100_chain_bsz2_accum8_full204/checkpoints/model/iter_000001000.pt"
+        "w2a_so101_combined_lora32_iter2500_75m_2gpu_bsz2_accum8_val5/"
+        "checkpoints/model/iter_000003400.pt"
     )
     dataset_statistics_path: str | None = None
     stats_cache_dir: str | None = "~/.cache/mimic_lerobot_stats"
@@ -65,7 +72,7 @@ class MimicVideoConfig(PreTrainedConfig):
 
     # Inference knobs.
     num_sampling_step: int = 35
-    stop_after_step: int | None = 30
+    stop_after_step: int | None = 15
     seed: int = 0
     increment_seed_per_chunk: bool = False
     use_cuda_graphs: bool = False
