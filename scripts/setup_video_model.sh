@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Set up the video model: download the finetuned LoRA checkpoint, sync the uv
-# env, fuse adapters into the base weights, and activate the venv.
+# Set up the video model: sync uv env (provides hf CLI), download artifacts,
+# fuse LoRA adapters into the base weights, and activate the venv.
 #
 # Usage:  source scripts/setup_video_model.sh
 
@@ -13,20 +13,21 @@ cat <<'BANNER'
 ================================================================================
   This script prepares the push-that-thing video model for inference. It will:
 
-    1. Download the finetuned LoRA DiT checkpoint from
+    1. Install uv (if missing) and sync the cu126 env in mimic-video/model/.
+    2. Activate the venv (which ships the hf CLI used by later steps).
+    3. Download the finetuned LoRA DiT checkpoint from
        push-that-thing/cosmos-task1-task2 into <parent>/checkpoints/video-model/.
-    2. Download the Cosmos VAE tokenizer from jonpai/mimic-video into
+    4. Download the Cosmos VAE tokenizer from jonpai/mimic-video into
        <parent>/checkpoints/tokenizer/.
-    3. Download precomputed T5 embeddings for task1 and task2 from
+    5. Download precomputed T5 embeddings for task1 and task2 from
        push-that-thing/task_1 and push-that-thing/task_2 into
        <parent>/embeddings/{task1,task2}/.
-    4. Install uv (if missing) and sync the cu126 env in mimic-video/model/.
-    5. Fuse the LoRA adapters into the base weights, producing *_fused.pt
+    6. Fuse the LoRA adapters into the base weights, producing *_fused.pt
        next to the downloaded checkpoint.
-    6. Activate the venv (only persists when this file is sourced).
+    7. Re-activate the venv in the caller's shell (only persists when sourced).
 
-  Requirements: hf CLI authenticated (hf auth login), Linux/x86_64 for the
-  uv sync step (the lockfile is linux-only).
+  Requirements: hf authenticated (hf auth login) after step 2, Linux/x86_64 for
+  the uv sync step (the lockfile is linux-only).
 
   Usage:  source scripts/setup_video_model.sh
 ================================================================================
@@ -38,12 +39,30 @@ BANNER
 
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   repo_root="$(cd "$script_dir/.." && pwd)"
-  checkpoints_dir="$(cd "$repo_root/.." && pwd)/checkpoints/video-model"
+  parent_dir="$(cd "$repo_root/.." && pwd)"
   model_dir="$repo_root/mimic-video/model"
+  checkpoints_dir="$parent_dir/checkpoints/video-model"
+  tokenizer_dir="$parent_dir/checkpoints/tokenizer"
+  emb_root="$parent_dir/embeddings"
 
+  # 1. Install uv (if missing) and sync env.
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "==> Installing uv"
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    [[ -f "$HOME/.local/bin/env" ]] && source "$HOME/.local/bin/env"
+  fi
+
+  echo "==> uv sync --extra cu126 in $model_dir"
+  cd "$model_dir"
+  uv sync --extra cu126
+
+  # 2. Activate venv so subsequent hf / python calls use it.
+  # shellcheck disable=SC1091
+  source "$model_dir/.venv/bin/activate"
+  echo "==> activated venv: $(command -v python)"
+
+  # 3. Download latest_checkpoint.txt, read the filename, fetch that .pt.
   mkdir -p "$checkpoints_dir"
-
-  # 1. Download latest_checkpoint.txt, read the filename, fetch that .pt.
   echo "==> Downloading latest_checkpoint.txt from $HF_REPO"
   hf download "$HF_REPO" "$EXPERIMENT_PATH/latest_checkpoint.txt" \
     --local-dir "$checkpoints_dir"
@@ -58,8 +77,7 @@ BANNER
   dst_ckpt="$checkpoints_dir/$ckpt_name"
   mv -f "$checkpoints_dir/$EXPERIMENT_PATH/model/$ckpt_name" "$dst_ckpt"
 
-  # 2. Download the VAE tokenizer to <parent>/checkpoints/tokenizer/.
-  tokenizer_dir="$(cd "$repo_root/.." && pwd)/checkpoints/tokenizer"
+  # 4. Download the VAE tokenizer.
   mkdir -p "$tokenizer_dir"
   echo "==> Downloading VAE tokenizer from jonpai/mimic-video"
   hf download jonpai/mimic-video "video_backbone/tokenizer/tokenizer.pth" \
@@ -67,8 +85,7 @@ BANNER
   mv -f "$tokenizer_dir/video_backbone/tokenizer/tokenizer.pth" "$tokenizer_dir/tokenizer.pth"
   rm -rf "$tokenizer_dir/video_backbone"
 
-  # 3. Download T5 embeddings for task1 and task2.
-  emb_root="$(cd "$repo_root/.." && pwd)/embeddings"
+  # 5. Download T5 embeddings for task1 and task2.
   mkdir -p "$emb_root"
   for pair in "task1:task_1" "task2:task_2"; do
     local_name="${pair%%:*}"
@@ -82,25 +99,14 @@ BANNER
     rm -rf "$tmp_dl"
   done
 
-  # 4. Install uv (if missing) and sync env.
-  if ! command -v uv >/dev/null 2>&1; then
-    echo "==> Installing uv"
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    [[ -f "$HOME/.local/bin/env" ]] && source "$HOME/.local/bin/env"
-  fi
-
-  echo "==> uv sync --extra cu126 in $model_dir"
-  cd "$model_dir"
-  uv sync --extra cu126
-
-  # 5. Fuse LoRA adapters into base weights.
+  # 6. Fuse LoRA adapters into base weights.
   echo "==> Fusing LoRA adapters: $dst_ckpt"
-  uv run python scripts/fuse_lora_ckpt.py "$dst_ckpt"
+  python scripts/fuse_lora_ckpt.py "$dst_ckpt"
 )
 status=$?
 [[ $status -ne 0 ]] && { return $status 2>/dev/null || exit $status; }
 
-# 6. Activate the venv in the caller's shell.
+# 7. Re-activate the venv in the caller's shell.
 __svm_venv="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/mimic-video/model/.venv/bin/activate"
 # shellcheck disable=SC1090
 source "$__svm_venv"
