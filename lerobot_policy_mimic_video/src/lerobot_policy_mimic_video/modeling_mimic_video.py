@@ -4,6 +4,7 @@ import collections
 import hashlib
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,11 @@ except ImportError:
 from .configuration_mimic_video import MimicVideoConfig
 
 LOGGER = logging.getLogger(__name__)
+
+# Ablation: hold each policy action for N control ticks → 1/N speed playback.
+# Read from env so deploy_so101.sh can toggle it without code edits. 1 (default)
+# disables the feature entirely — original baseline behavior.
+_ACTION_REPEAT = max(1, int(os.environ.get("MIMIC_ACTION_REPEAT", "1")))
 
 
 class MimicVideoPolicy(PreTrainedPolicy):
@@ -40,6 +46,8 @@ class MimicVideoPolicy(PreTrainedPolicy):
         self._image_history: collections.deque[torch.Tensor] = collections.deque(maxlen=config.obs_image_horizon)
         self._action_queue: collections.deque[torch.Tensor] = collections.deque()
         self._chunks_generated = 0
+        self._held_action: torch.Tensor | None = None
+        self._hold_remaining = 0
 
         if config.load_on_init:
             self.load_mimic_pipeline()
@@ -48,6 +56,8 @@ class MimicVideoPolicy(PreTrainedPolicy):
         self._image_history.clear()
         self._action_queue.clear()
         self._chunks_generated = 0
+        self._held_action = None
+        self._hold_remaining = 0
 
     def get_optim_params(self) -> dict[str, Any]:
         return {"params": [self._dummy]}
@@ -64,6 +74,9 @@ class MimicVideoPolicy(PreTrainedPolicy):
 
     @torch.no_grad()
     def select_action(self, batch: dict[str, Any], **kwargs) -> torch.Tensor:
+        if self._hold_remaining > 0 and self._held_action is not None:
+            self._hold_remaining -= 1
+            return self._held_action
         if not self._action_queue:
             chunk = self.predict_action_chunk(batch, **kwargs)
             if chunk.shape[0] != 1:
@@ -71,7 +84,10 @@ class MimicVideoPolicy(PreTrainedPolicy):
             execute_steps = min(self.config.n_action_steps, chunk.shape[1])
             for action in chunk[0, :execute_steps]:
                 self._action_queue.append(action)
-        return self._action_queue.popleft()
+        action = self._action_queue.popleft()
+        self._held_action = action
+        self._hold_remaining = max(_ACTION_REPEAT - 1, 0)
+        return action
 
     def load_mimic_pipeline(self) -> None:
         mimic_model_dir = self._resolve_path(self.config.mimic_model_dir, expect_exists=True)
