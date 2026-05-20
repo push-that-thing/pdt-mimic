@@ -53,6 +53,7 @@ CMD=(
 [[ -n "${VIDEO_CKPT_PATH:-}" ]] && CMD+=(--policy.video_checkpoint_path="$VIDEO_CKPT_PATH")
 [[ -n "${EXPERIMENT_NAME:-}" ]] && CMD+=(--policy.experiment_name="$EXPERIMENT_NAME")
 [[ -n "${STATS_PATH:-}" ]]      && CMD+=(--policy.dataset_statistics_path="$STATS_PATH")
+[[ -n "${PROMPT_EMB_DIR:-}" ]]  && CMD+=(--policy.prompt_embedding_cache_dir="$PROMPT_EMB_DIR")
 
 echo "+ ${CMD[*]}"
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
