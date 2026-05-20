@@ -79,4 +79,9 @@ echo "==> Prompt         : $TASK_PROMPT"
 echo ""
 
 export TASK_PROMPT ACTION_CKPT VIDEO_CKPT_PATH EXPERIMENT_NAME STATS_PATH PROMPT_EMB_DIR
-DRY_RUN="$DRY_RUN" bash "$REPO_ROOT/scripts/deploy_so101.sh"
+if [[ "${SMOKE:-0}" == "1" ]]; then
+  echo "==> SMOKE TEST (no arm): load pipeline + one inference"
+  python "$REPO_ROOT/scripts/smoke_load.py"
+else
+  DRY_RUN="$DRY_RUN" bash "$REPO_ROOT/scripts/deploy_so101.sh"
+fi
