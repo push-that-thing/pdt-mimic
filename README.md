@@ -51,6 +51,14 @@ lerobot/  mimic-video/         # submodules
   `~/.cache/huggingface/lerobot/calibration/robots/so101_follower/<robot_id>.json`.
 - `HF_TOKEN` with access to the private `push-that-thing/*` repos.
 
+## Test without the arm
+
+```bash
+SMOKE=1 bash run_eval_task1.sh
+```
+Loads the pipeline and runs one inference on a fake frame (no robot/camera).
+Prints torch/CUDA + GPU arch info first, so a Blackwell/cu128 problem is obvious.
+
 ## Safety
 
 `run_eval_task*.sh` is **dry-run by default** — it prints the exact

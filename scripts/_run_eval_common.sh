@@ -25,9 +25,11 @@ if [[ -z "${HF_TOKEN:-}" ]]; then
   exit 1
 fi
 
-# 1. One-time machine setup if the venv isn't there yet.
-if [[ ! -x "$MODEL_DIR/.venv/bin/python" ]]; then
-  echo "==> venv missing — running setup.sh"
+# 1. Ensure a COMPLETE environment. Re-run setup if the venv is missing or
+#    incomplete (the policy plugin can't import) — self-healing, so a half-built
+#    venv never silently breaks the run.
+if ! "$MODEL_DIR/.venv/bin/python" -c "import lerobot_policy_mimic_video" >/dev/null 2>&1; then
+  echo "==> Environment missing or incomplete — running setup.sh"
   bash "$REPO_ROOT/setup.sh"
 fi
 
