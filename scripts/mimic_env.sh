@@ -16,10 +16,14 @@ if [[ ! -x "$VENV/bin/python" ]]; then
 fi
 
 # Bundled CUDA libs (avoids sudo ldconfig — needed by transformer_engine + cosmos).
-CUDA_HOME="$(dirname "$(dirname "$(find "$VENV"/lib/python*/site-packages/nvidia -maxdepth 1 -type d | head -1)")")/nvidia"
-export CUDA_HOME
-NVIDIA_LIBS="$(find "$CUDA_HOME" -maxdepth 2 -name lib -type d 2>/dev/null | tr '\n' ':' | sed 's/:$//')"
-export LD_LIBRARY_PATH="$NVIDIA_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+for _nv in "$VENV"/lib/python*/site-packages/nvidia; do
+  [[ -d "$_nv" ]] && export CUDA_HOME="$_nv" && break
+done
+if [[ -n "${CUDA_HOME:-}" ]]; then
+  # find|tr|sed is SIGPIPE-safe (consumers read all input); no `head` under pipefail.
+  NVIDIA_LIBS="$(find "$CUDA_HOME" -maxdepth 2 -name lib -type d 2>/dev/null | tr '\n' ':' | sed 's/:$//')"
+  export LD_LIBRARY_PATH="$NVIDIA_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
 
 # Cosmos / imaginaire are imported from source.
 export PYTHONPATH="$MODEL_DIR${PYTHONPATH:+:$PYTHONPATH}"
