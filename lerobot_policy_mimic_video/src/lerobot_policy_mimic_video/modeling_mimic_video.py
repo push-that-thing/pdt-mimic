@@ -97,6 +97,10 @@ class MimicVideoPolicy(PreTrainedPolicy):
         if self.config.disable_guardrails:
             mimic_config.model.config.video_pipe_config.guardrail_config.enabled = False
         mimic_config.model.config.video_dit_path = str(video_checkpoint)
+        if self.config.action_num_denoising_steps is not None:
+            mimic_config.model.config.pipe_config.scheduler.num_denoising_steps = (
+                self.config.action_num_denoising_steps
+            )
 
         if not self.config.use_text_encoder:
             self._prompt_embedding = self._load_prompt_embedding(dtype=dtype, device=device)

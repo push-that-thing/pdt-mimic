@@ -55,6 +55,15 @@ CMD=(
 [[ -n "${STATS_PATH:-}" ]]      && CMD+=(--policy.dataset_statistics_path="$STATS_PATH")
 [[ -n "${PROMPT_EMB_DIR:-}" ]]  && CMD+=(--policy.prompt_embedding_cache_dir="$PROMPT_EMB_DIR")
 
+# Inference knobs (optional). num_sampling_step/stop_after_step = video backbone;
+# action_num_denoising_steps = action decoder; n_action_steps = actions per replan.
+[[ -n "${NUM_SAMPLING_STEP:-}" ]]    && CMD+=(--policy.num_sampling_step="$NUM_SAMPLING_STEP")
+[[ -n "${STOP_AFTER_STEP:-}" ]]      && CMD+=(--policy.stop_after_step="$STOP_AFTER_STEP")
+[[ -n "${ACTION_DENOISE_STEPS:-}" ]] && CMD+=(--policy.action_num_denoising_steps="$ACTION_DENOISE_STEPS")
+[[ -n "${N_ACTION_STEPS:-}" ]]       && CMD+=(--policy.n_action_steps="$N_ACTION_STEPS")
+[[ -n "${SEED:-}" ]]                 && CMD+=(--policy.seed="$SEED")
+[[ -n "${USE_CUDA_GRAPHS:-}" ]]      && CMD+=(--policy.use_cuda_graphs="$USE_CUDA_GRAPHS")
+
 echo "+ ${CMD[*]}"
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
   exit 0

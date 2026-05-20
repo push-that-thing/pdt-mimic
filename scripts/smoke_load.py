@@ -26,6 +26,15 @@ _ENV_TO_FIELD = {
     "TASK_PROMPT": "task",
 }
 
+# Integer inference knobs (same names as deploy_so101.sh forwards).
+_INT_ENV_TO_FIELD = {
+    "NUM_SAMPLING_STEP": "num_sampling_step",
+    "STOP_AFTER_STEP": "stop_after_step",
+    "ACTION_DENOISE_STEPS": "action_num_denoising_steps",
+    "N_ACTION_STEPS": "n_action_steps",
+    "SEED": "seed",
+}
+
 
 def free_gb() -> float:
     if not torch.cuda.is_available():
@@ -49,6 +58,10 @@ def main() -> int:
         val = os.environ.get(env)
         if val:
             kwargs[field] = val
+    for env, field in _INT_ENV_TO_FIELD.items():
+        val = os.environ.get(env)
+        if val:
+            kwargs[field] = int(val)
 
     cfg = MimicVideoConfig(**kwargs)
     cfg.input_features = cfg.default_input_features

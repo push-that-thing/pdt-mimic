@@ -66,6 +66,9 @@ class MimicVideoConfig(PreTrainedConfig):
     # Inference knobs.
     num_sampling_step: int = 35
     stop_after_step: int | None = 30
+    # Action-decoder diffusion steps (BetaScheduler). None keeps the experiment
+    # default; otherwise overrides pipe_config.scheduler.num_denoising_steps.
+    action_num_denoising_steps: int | None = None
     seed: int = 0
     increment_seed_per_chunk: bool = False
     use_cuda_graphs: bool = False
