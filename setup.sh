@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # One-time machine setup for SO-101 MIMIC video-action deployment.
 #
-# Does, in order: install uv -> init submodules -> create cu126 venv ->
-# repin torch to cu128 (Blackwell / RTX 5090) -> install lerobot + policy +
-# hardware deps -> download the shared video backbone + tokenizer + T5 cache.
+# Does, in order: install uv -> init submodules -> uv sync (cu126 cosmos deps)
+# -> install lerobot runtime deps -> repin torch to cu128 (Blackwell / RTX 5090)
+# -> install lerobot + policy + hardware deps -> download video backbone +
+# tokenizer + T5 cache. Re-running rebuilds a broken venv cleanly.
 #
 # After this, deploy with:  bash run_eval_task1.sh   (or task2)
 #
