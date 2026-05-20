@@ -52,20 +52,36 @@ cd "$MODEL_DIR"
 uv sync --extra cu126
 source .venv/bin/activate
 
-# 4. Blackwell / RTX 5090 (sm_120) needs a cu128 torch build.
+# 4. lerobot runtime deps (lerobot itself is installed --no-deps in step 6).
+#    Installed BEFORE the cu128 repin so torch-dependent wheels don't pull a
+#    cu126 torch over it.
+echo "==> Installing lerobot runtime deps"
+uv pip install \
+  "numpy==1.26.4" \
+  "datasets>=4.0.0,<4.2.0" \
+  "huggingface-hub[hf-transfer,cli]>=0.34.2,<0.36.0" \
+  "av>=15.0.0,<16.0.0" \
+  "jsonlines>=4.0.0,<5.0.0" \
+  "draccus==0.10.0" \
+  "gymnasium>=1.1.1,<2.0.0" \
+  "deepdiff>=7.0.1,<9.0.0" \
+  "torchcodec>=0.2.1,<0.6.0" \
+  "wandb==0.19.11"
+
+# 5. Blackwell / RTX 5090 (sm_120) needs a cu128 torch build. Do this LAST so
+#    nothing re-pulls a cu126 torch over it.
 echo "==> Repinning torch $TORCH_VERSION + torchvision $TORCHVISION_VERSION ($CUDA_TAG)"
 uv pip install --reinstall \
   "torch==$TORCH_VERSION" "torchvision==$TORCHVISION_VERSION" \
   --index-url "https://download.pytorch.org/whl/$CUDA_TAG"
 
-# 5. lerobot + policy plugin + hardware deps + hf CLI
+# 6. lerobot + policy plugin + hardware deps (--no-deps: don't disturb the stack).
 echo "==> Installing lerobot, mimic_video policy, hardware deps"
 uv pip install --no-deps -e "$ROOT_DIR/lerobot"
 uv pip install --no-deps -e "$ROOT_DIR/lerobot_policy_mimic_video"
 uv pip install -r "$ROOT_DIR/requirements-deploy.txt"
-uv pip install "huggingface_hub[cli]"
 
-# 6. Shared model assets -> BYOP default paths.
+# 7. Shared model assets -> BYOP default paths.
 echo "==> Downloading tokenizer"
 mkdir -p "$CKPT_DIR/video_backbone/tokenizer"
 hf download jonpai/mimic-video "video_backbone/tokenizer/tokenizer.pth" --local-dir "$CKPT_DIR"
