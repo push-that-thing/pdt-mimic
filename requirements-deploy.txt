@@ -1,0 +1,5 @@
+# SO-101 hardware-deployment deps, layered on top of the mimic-video
+# Python 3.10 + cu126 venv created by .brev/setup.sh. torch/numpy/opencv are
+# already provided by mimic-video/model/pyproject.toml.
+feetech-servo-sdk>=1.0,<2.0
+pyserial>=3.5

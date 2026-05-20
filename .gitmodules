@@ -1,3 +1,7 @@
 [submodule "mimic-video"]
 	path = mimic-video
 	url = https://github.com/push-that-thing/mimic-video.git
+[submodule "lerobot"]
+	path = lerobot
+	url = https://github.com/huggingface/lerobot.git
+	branch = v0.4.0
