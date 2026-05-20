@@ -23,7 +23,7 @@ TASK_PROMPT="${TASK_PROMPT:-Push the white object to the right into the goal whi
 
 # Output dataset (lerobot-record requires a dataset.repo_id even for inference rollouts).
 DATASET_REPO="${DATASET_REPO:-local/mimic_so101_eval}"
-DATASET_ROOT="${DATASET_ROOT:-$HF_HOME/eval_rollouts}"
+DATASET_ROOT="${DATASET_ROOT:-$HOME/eval_rollouts}"
 NUM_EPISODES="${NUM_EPISODES:-1}"
 EPISODE_TIME_S="${EPISODE_TIME_S:-15}"
 FPS="${FPS:-30}"
