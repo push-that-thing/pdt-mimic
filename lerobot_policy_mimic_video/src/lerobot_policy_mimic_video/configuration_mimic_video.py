@@ -58,7 +58,7 @@ class MimicVideoConfig(PreTrainedConfig):
     action_checkpoint_path: str = (
         "mimic-video/model/checkpoints/vam/so101/"
         "w2a_so101_combined_lora32_iter2500_75m_2gpu_bsz2_accum8_val5/"
-        "checkpoints/model/iter_000003400.pt"
+        "checkpoints/model/iter_000003300.pt"
     )
     dataset_statistics_path: str | None = None
     stats_cache_dir: str | None = "~/.cache/mimic_lerobot_stats"

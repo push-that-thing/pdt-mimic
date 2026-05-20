@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Deploy task2 of the MIMIC video SO-101 policy.
-# Same shape as deploy_so101.sh (task1), but targets task2 assets:
-#   - action checkpoint: push-that-thing/model :: action_decoder/chain/w2a_so101_task2_combined_lora32_iter2500_75m_2gpu_bsz2_accum8_val5/checkpoints/model/iter_*.pt
-#   - stats cache:       push-that-thing/model :: action_decoder/stats_cache/eeaabacd...
+# Deploy task2 of the MIMIC video SO-101 policy (combined-LoRA variant).
+# Same shape as deploy_so101.sh (task1) / deploy_so101_task2_slow.sh:
+#   - action checkpoint: push-that-thing/model
+#       :: action_decoder/chain/w2a_so101_task2_combined_lora32_iter2500_75m_2gpu_bsz2_accum8_val5/checkpoints/model/iter_*.pt
+#   - stats cache:       push-that-thing/model
+#       :: action_decoder/stats_cache/eeaabacd...  (pinned explicitly via
+#          --policy.dataset_statistics_path so newest-mtime doesn't shadow it)
 #   - T5 embedding:      push-that-thing/task_2 :: .t5_embeddings/*.npz
 #   - prompt:            auto-detected from the downloaded T5 embedding (.npz key)
 #
@@ -19,7 +22,8 @@
 #   FPS=30                     control + camera rate
 #
 # Ablation flags (defaults match task1):
-#   STOP_AFTER_STEP=15         diffusion steps
+#   NUM_SAMPLING_STEP=35       total diffusion schedule length (model default 35)
+#   STOP_AFTER_STEP=15         early-stop after N steps (model default 15)
 #   N_ACTION_STEPS=10          targets executed per chunk (lower = less motion per chunk)
 #   MAX_RELATIVE_TARGET=       per-tick motor delta cap (try 10-20)
 #   ACTION_REPEAT=1            hold each policy action for N ticks
@@ -28,6 +32,7 @@
 # Override task2 specifics:
 #   TASK2_ITER=000003100       which task2 checkpoint iter to use (1900, 3100, etc.)
 #   TASK_PROMPT="..."          force a prompt (default = auto-detect from .npz)
+#   TASK2_STATS_HASH=...       override stats file hash (default eeaabacd...)
 
 set -eo pipefail
 
@@ -39,13 +44,14 @@ source "$SCRIPT_DIR/mimic_env.sh"
 TASK2_MODEL_REPO="push-that-thing/model"
 TASK2_DATASET_REPO="push-that-thing/task_2"
 TASK2_ITER="${TASK2_ITER:-000003100}"
-TASK2_CKPT_REL="action_decoder/chain/w2a_so101_task2_combined_lora32_iter2500_75m_2gpu_bsz2_accum8_val5/checkpoints/model/iter_${TASK2_ITER}.pt"
-TASK2_STATS_HASH="eeaabacd800b60e08ef93a5398f5c3e2e193c6fef2f7af04d47bca467bc69f85"
+TASK2_RUN="w2a_so101_task2_combined_lora32_iter2500_75m_2gpu_bsz2_accum8_val5"
+TASK2_CKPT_REL="action_decoder/chain/${TASK2_RUN}/checkpoints/model/iter_${TASK2_ITER}.pt"
+TASK2_STATS_HASH="${TASK2_STATS_HASH:-eeaabacd800b60e08ef93a5398f5c3e2e193c6fef2f7af04d47bca467bc69f85}"
 TASK2_STATS_REL="action_decoder/stats_cache/${TASK2_STATS_HASH}"
 
 # --- local target paths (mirror task1 layout) ---
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-TASK2_CKPT_LOCAL="$REPO_ROOT/mimic-video/model/checkpoints/vam/so101/w2a_so101_task2_combined_lora32_iter2500_75m_2gpu_bsz2_accum8_val5/checkpoints/model/iter_${TASK2_ITER}.pt"
+TASK2_CKPT_LOCAL="$REPO_ROOT/mimic-video/model/checkpoints/vam/so101/${TASK2_RUN}/checkpoints/model/iter_${TASK2_ITER}.pt"
 STATS_CACHE_DIR="${MIMIC_STATS_CACHE_DIR:-$HOME/.cache/mimic_lerobot_stats}"
 T5_CACHE_DIR="${MIMIC_T5_CACHE_DIR:-$HOME/.cache/mimic_lerobot_t5/.t5_embeddings}"
 
@@ -65,11 +71,12 @@ if [[ ! -f "$TASK2_CKPT_LOCAL" ]]; then
   cp -f "$src" "$TASK2_CKPT_LOCAL"
 fi
 
-# 2) Stats cache file
-if [[ ! -f "$STATS_CACHE_DIR/$TASK2_STATS_HASH" ]]; then
+# 2) Stats cache file — pinned explicitly, not by mtime.
+TASK2_STATS_LOCAL="$STATS_CACHE_DIR/$TASK2_STATS_HASH"
+if [[ ! -f "$TASK2_STATS_LOCAL" ]]; then
   echo "[task2] downloading stats cache $TASK2_STATS_HASH …"
   src=$(hf_download "$TASK2_MODEL_REPO" "$TASK2_STATS_REL" model)
-  cp -f "$src" "$STATS_CACHE_DIR/$TASK2_STATS_HASH"
+  cp -f "$src" "$TASK2_STATS_LOCAL"
 fi
 
 # 3) T5 embeddings — download the .t5_embeddings directory from the task_2
@@ -130,6 +137,7 @@ NUM_EPISODES="${NUM_EPISODES:-1}"
 EPISODE_TIME_S="${EPISODE_TIME_S:-15}"
 FPS="${FPS:-30}"
 DISPLAY_DATA="${DISPLAY_DATA:-false}"
+NUM_SAMPLING_STEP="${NUM_SAMPLING_STEP:-35}"
 STOP_AFTER_STEP="${STOP_AFTER_STEP:-15}"
 N_ACTION_STEPS="${N_ACTION_STEPS:-10}"
 MAX_RELATIVE_TARGET="${MAX_RELATIVE_TARGET:-}"
@@ -137,7 +145,7 @@ ACTION_REPEAT="${ACTION_REPEAT:-1}"
 export MIMIC_ACTION_REPEAT="$ACTION_REPEAT"
 
 # Make checkpoint path relative to repo root (config resolves both ways).
-TASK2_CKPT_REPO_REL="mimic-video/model/checkpoints/vam/so101/w2a_so101_task2_combined_lora32_iter2500_75m_2gpu_bsz2_accum8_val5/checkpoints/model/iter_${TASK2_ITER}.pt"
+TASK2_CKPT_REPO_REL="mimic-video/model/checkpoints/vam/so101/${TASK2_RUN}/checkpoints/model/iter_${TASK2_ITER}.pt"
 
 CMD=(
   python "$SCRIPT_DIR/lerobot_record_mimic.py"
@@ -154,9 +162,11 @@ CMD+=(
   --policy.type=mimic_video
   --policy.device=cuda
   --policy.use_text_encoder=false
+  --policy.num_sampling_step="$NUM_SAMPLING_STEP"
   --policy.stop_after_step="$STOP_AFTER_STEP"
   --policy.n_action_steps="$N_ACTION_STEPS"
   --policy.action_checkpoint_path="$TASK2_CKPT_REPO_REL"
+  --policy.dataset_statistics_path="$TASK2_STATS_LOCAL"
   --policy.task="$TASK_PROMPT"
   --dataset.repo_id="$DATASET_REPO"
   --dataset.root="$DATASET_ROOT"
@@ -182,7 +192,8 @@ fi
   echo "host: $(hostname)  user: $(whoami)  cwd: $(pwd)"
   echo "branch: $(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null) @ $(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null)"
   echo "python: $(command -v python) ($(python --version 2>&1))"
-  echo "task2 ckpt: $TASK2_CKPT_LOCAL"
+  echo "task2 ckpt:  $TASK2_CKPT_LOCAL"
+  echo "task2 stats: $TASK2_STATS_LOCAL"
   echo "task2 prompt: $TASK_PROMPT"
   echo "CMD: ${CMD[*]}"
   echo "==="

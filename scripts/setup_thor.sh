@@ -74,7 +74,7 @@ uv pip install --extra-index-url "$JETSON_INDEX" \
   pynvml scikit-image qwen-vl-utils retinaface-py pycocotools attrdict \
   pandas wandb absl-py megatron-core modelscope tyro av ipdb h11 \
   draccus jsonlines torchcodec deepdiff gymnasium "datasets>=4" rerun-sdk \
-  pyserial
+  pyserial feetech-servo-sdk
 
 echo "==> 4. Installing lerobot + mimic policy in editable mode (no deps)"
 uv pip install --no-deps -e "$PDT_DIR/lerobot" -e "$PDT_DIR/lerobot_policy_mimic_video"
@@ -87,7 +87,9 @@ fi
 echo "==> 5. Fetching action checkpoint + fusing video backbone"
 bash "$PDT_DIR/scripts/fetch_deploy_checkpoints.sh"
 
-echo "==> 6. Pulling cosmos tokenizer + T5 dir structure from jonpai/mimic-video"
+echo "==> 6. Pulling cosmos video tokenizer from jonpai/mimic-video"
+echo "    (skipping text_encoder/ — 45 GB T5-11B is unused when deploy runs with"
+echo "     use_text_encoder=false and precomputed prompt embeddings)"
 cd "$MODEL_DIR"
 python - <<'PY'
 from huggingface_hub import snapshot_download
@@ -97,7 +99,7 @@ ckpt.mkdir(parents=True, exist_ok=True)
 snapshot_download(
     repo_id="jonpai/mimic-video",
     local_dir=str(ckpt),
-    allow_patterns=["text_encoder/*", "video_backbone/tokenizer/*"],
+    allow_patterns=["video_backbone/tokenizer/*"],
 )
 PY
 

@@ -17,7 +17,8 @@
 #   FPS=30                     control + camera rate
 #
 # Ablation flags — each defaults to baseline behavior:
-#   STOP_AFTER_STEP=15         diffusion steps (model default 15; lower = faster, coarser)
+#   NUM_SAMPLING_STEP=35       total diffusion schedule length (model default 35)
+#   STOP_AFTER_STEP=15         early-stop after N steps (model default 15; lower = faster, coarser)
 #   N_ACTION_STEPS=10          how many of the 90 planned targets to execute per chunk (lower = less motion per chunk)
 #   MAX_RELATIVE_TARGET=       per-tick motor delta cap (empty = no cap; try 10–20)
 #   ACTION_REPEAT=1            hold each policy action for N ticks (1 = no repeat)
@@ -66,6 +67,8 @@ EPISODE_TIME_S="${EPISODE_TIME_S:-15}"
 FPS="${FPS:-30}"
 # Rerun viewer needs a display. Default off so SSH/headless runs don't crash.
 DISPLAY_DATA="${DISPLAY_DATA:-false}"
+# Total diffusion schedule length. Model default 35.
+NUM_SAMPLING_STEP="${NUM_SAMPLING_STEP:-35}"
 # Diffusion early-stop. Model default 15. Lower = faster compute, coarser.
 STOP_AFTER_STEP="${STOP_AFTER_STEP:-15}"
 # Ablation: how many of the 90 planned targets to enqueue per chunk. Lower =
@@ -78,6 +81,20 @@ MAX_RELATIVE_TARGET="${MAX_RELATIVE_TARGET:-}"
 # 1 = original behavior. Read by lerobot_policy_mimic_video via env.
 ACTION_REPEAT="${ACTION_REPEAT:-1}"
 export MIMIC_ACTION_REPEAT="$ACTION_REPEAT"
+
+# Stats cache for task1 (combined). Pinned explicitly so the newest-mtime
+# resolver in modeling_mimic_video.py doesn't pick up a sibling stats file
+# (e.g. ff8447e9 = 30-step horizon, shape-incompatible with this 90-step model).
+# Verified: SHA256 of training config (task_1, val_ratio=0.05) → 77c34c08...
+TASK1_STATS_HASH="${TASK1_STATS_HASH:-77c34c080268301503540af7a2f650baef0326ae0c3401fb4e786bfdb0f5ebc6}"
+STATS_CACHE_DIR="${MIMIC_STATS_CACHE_DIR:-$HOME/.cache/mimic_lerobot_stats}"
+TASK1_STATS_LOCAL="$STATS_CACHE_DIR/$TASK1_STATS_HASH"
+if [[ ! -f "$TASK1_STATS_LOCAL" ]]; then
+  echo "[task1] downloading stats cache $TASK1_STATS_HASH …"
+  mkdir -p "$STATS_CACHE_DIR"
+  src=$(hf download push-that-thing/model "action_decoder/stats_cache/$TASK1_STATS_HASH" --repo-type model 2>/dev/null | sed -e 's/^path=//')
+  cp -f "$src" "$TASK1_STATS_LOCAL"
+fi
 
 CMD=(
   python "$SCRIPT_DIR/lerobot_record_mimic.py"
@@ -94,8 +111,10 @@ CMD+=(
   --policy.type=mimic_video
   --policy.device=cuda
   --policy.use_text_encoder=false
+  --policy.num_sampling_step="$NUM_SAMPLING_STEP"
   --policy.stop_after_step="$STOP_AFTER_STEP"
   --policy.n_action_steps="$N_ACTION_STEPS"
+  --policy.dataset_statistics_path="$TASK1_STATS_LOCAL"
   --policy.task="$TASK_PROMPT"
   --dataset.repo_id="$DATASET_REPO"
   --dataset.root="$DATASET_ROOT"

@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 # Shared environment for mimic-video deployment on this box.
-# Source from other scripts: `source "$(dirname "$0")/mimic_env.sh"`
+# Safe to source from an interactive shell — does not enable `set -e` /
+# `pipefail` in the parent, and uses `return` rather than `exit` on failure.
 
-set -eo pipefail
+__mimic_env_sourced=0
+(return 0 2>/dev/null) && __mimic_env_sourced=1
+__mimic_env_die() {
+  echo "ERROR: $*" >&2
+  if [[ "$__mimic_env_sourced" == "1" ]]; then
+    return 1
+  else
+    exit 1
+  fi
+}
 
 : "${PDT_DIR:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 MIMIC_DIR="$PDT_DIR/mimic-video"
@@ -10,23 +20,29 @@ MODEL_DIR="$MIMIC_DIR/model"
 VENV="$MODEL_DIR/.venv"
 
 if [[ ! -x "$VENV/bin/python" ]]; then
-  echo "ERROR: venv missing at $VENV." >&2
-  echo "  x86_64 build:  uv sync --extra cu126 in $MODEL_DIR" >&2
-  echo "  Jetson Thor:   see scripts/setup_thor.sh" >&2
-  exit 1
+  __mimic_env_die "venv missing at $VENV.
+  x86_64 build:  uv sync --extra cu126 in $MODEL_DIR
+  RTX 5090:      bash scripts/setup_5090.sh
+  Jetson Thor:   bash scripts/setup_thor.sh"
 fi
 
 # Bundled CUDA libs. Layout differs by platform: x86_64 cu126 wheels drop libs
 # under nvidia/<pkg>/lib; the Jetson Thor cu13 wheels use nvidia/cu13/lib.
-PY_LIB="$VENV/lib/$(basename "$(find "$VENV/lib" -maxdepth 1 -name 'python*' -type d | head -n1)")/site-packages"
+# Tolerate either missing — the venv may not have torch+CUDA installed yet, or
+# the system may rely on globally-installed CUDA libs (LD_LIBRARY_PATH already
+# set externally).
+PY_LIB="$VENV/lib/$(basename "$(find "$VENV/lib" -maxdepth 1 -name 'python*' -type d 2>/dev/null | head -n1)")/site-packages"
 THOR_CUDA_LIB="$PY_LIB/nvidia/cu13/lib"
+NVIDIA_LIBS=""
 if [[ -d "$THOR_CUDA_LIB" ]]; then
   NVIDIA_LIBS="$THOR_CUDA_LIB"
-else
+elif [[ -d "$PY_LIB/nvidia" ]]; then
   export CUDA_HOME="$PY_LIB/nvidia"
-  NVIDIA_LIBS="$(find "$CUDA_HOME" -maxdepth 2 -name lib -type d 2>/dev/null | tr '\n' ':' | sed 's/:$//')"
+  NVIDIA_LIBS="$(find "$CUDA_HOME" -maxdepth 2 -name lib -type d 2>/dev/null | tr '\n' ':' | sed 's/:$//' || true)"
 fi
-export LD_LIBRARY_PATH="$NVIDIA_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+if [[ -n "$NVIDIA_LIBS" ]]; then
+  export LD_LIBRARY_PATH="$NVIDIA_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
 
 # Cosmos / imaginaire are loaded from source, not installed.
 export PYTHONPATH="$MODEL_DIR${PYTHONPATH:+:$PYTHONPATH}"
