@@ -22,7 +22,8 @@ CAMERA_IDX="${CAMERA_IDX:-0}"
 TASK_PROMPT="${TASK_PROMPT:-Push the white object to the right into the goal white circle. Stay within the two white lines.}"
 
 # Output dataset (lerobot-record requires a dataset.repo_id even for inference rollouts).
-DATASET_REPO="${DATASET_REPO:-local/mimic_so101_eval}"
+# Name must START with "eval_" when a policy is attached (lerobot sanity check).
+DATASET_REPO="${DATASET_REPO:-local/eval_mimic_so101}"
 DATASET_ROOT="${DATASET_ROOT:-$HOME/eval_rollouts}"
 NUM_EPISODES="${NUM_EPISODES:-1}"
 EPISODE_TIME_S="${EPISODE_TIME_S:-15}"
@@ -69,4 +70,7 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
   exit 0
 fi
 
-exec "${CMD[@]}"
+# Run under the crash-capture logger so a Python traceback, CUDA segfault, or a
+# dropped terminal still leaves the full error in $LOG_DIR (default ~/eval_logs).
+export LOG_TAG="${LOG_TAG:-deploy_so101}"
+exec "$SCRIPT_DIR/run_with_log.sh" "${CMD[@]}"
