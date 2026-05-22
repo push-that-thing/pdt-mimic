@@ -67,7 +67,8 @@ source .venv/bin/activate
 
 # 4. lerobot runtime deps (lerobot itself is installed --no-deps in step 6).
 #    Installed BEFORE the cu128 repin so torch-dependent wheels don't pull a
-#    cu126 torch over it.
+#    cu126 torch over it. rerun-sdk is held <0.24 on purpose: 0.24+ requires
+#    numpy>=2, which conflicts with cosmos's pinned numpy==1.26.4.
 echo "==> Installing lerobot runtime deps"
 uv pip install \
   "numpy==1.26.4" \
@@ -79,7 +80,7 @@ uv pip install \
   "gymnasium>=1.1.1,<2.0.0" \
   "deepdiff>=7.0.1,<9.0.0" \
   "torchcodec>=0.2.1,<0.6.0" \
-  "rerun-sdk>=0.24.0,<0.27.0" \
+  "rerun-sdk>=0.23.0,<0.24.0" \
   "wandb==0.19.11"
 
 # 5. Blackwell / RTX 5090 (sm_120) needs a cu128 torch build. Do this LAST so
