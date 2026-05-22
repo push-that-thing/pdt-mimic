@@ -67,6 +67,7 @@ uv pip install \
   "gymnasium>=1.1.1,<2.0.0" \
   "deepdiff>=7.0.1,<9.0.0" \
   "torchcodec>=0.2.1,<0.6.0" \
+  "rerun-sdk>=0.24.0,<0.27.0" \
   "wandb==0.19.11"
 
 # 5. Blackwell / RTX 5090 (sm_120) needs a cu128 torch build. Do this LAST so

@@ -23,8 +23,11 @@ TASK_PROMPT="${TASK_PROMPT:-Push the white object to the right into the goal whi
 
 # Output dataset (lerobot-record requires a dataset.repo_id even for inference rollouts).
 # Name must START with "eval_" when a policy is attached (lerobot sanity check).
+# Each run gets its own timestamped root: LeRobotDataset.create() does
+# mkdir(exist_ok=False), so a fixed path would collide with a previous (or
+# aborted) run. The timestamp keeps reruns clean and preserves past rollouts.
 DATASET_REPO="${DATASET_REPO:-local/eval_mimic_so101}"
-DATASET_ROOT="${DATASET_ROOT:-$HOME/eval_rollouts}"
+DATASET_ROOT="${DATASET_ROOT:-$HOME/eval_rollouts/$(date +%Y%m%d_%H%M%S)}"
 NUM_EPISODES="${NUM_EPISODES:-1}"
 EPISODE_TIME_S="${EPISODE_TIME_S:-15}"
 FPS="${FPS:-30}"
