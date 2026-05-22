@@ -20,9 +20,10 @@ export PDT_DIR="$REPO_ROOT"
 MODEL_DIR="$REPO_ROOT/mimic-video/model"
 AD_REPO="push-that-thing/model"
 
-if [[ -z "${HF_TOKEN:-}" ]]; then
-  echo "ERROR: export HF_TOKEN first." >&2
-  exit 1
+# HF_TOKEN is only needed for private HF repos; push-that-thing/model and the
+# task assets are public, so downloads work anonymously. Export it if set.
+if [[ -n "${HF_TOKEN:-}" ]]; then
+  export HF_TOKEN HUGGING_FACE_HUB_TOKEN="$HF_TOKEN"
 fi
 
 # 1. Ensure a COMPLETE environment. Re-run setup if the venv is missing or

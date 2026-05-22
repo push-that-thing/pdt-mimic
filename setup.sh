@@ -9,8 +9,7 @@
 # After this, deploy with:  bash run_eval_task1.sh   (or task2)
 #
 # Usage:
-#   export HF_TOKEN=hf_...
-#   bash setup.sh
+#   bash setup.sh            # HF_TOKEN is optional; set it only for private HF repos
 #
 # Tunables (env):
 #   TORCH_VERSION (2.7.0)  TORCHVISION_VERSION (0.22.0)  CUDA_TAG (cu128)
@@ -30,11 +29,14 @@ HF_MODEL_REPO="${HF_MODEL_REPO:-push-that-thing/cosmos-task1-task2}"
 VIDEO_CKPT_FILE="${VIDEO_CKPT_FILE:-posttraining/video2world/v2w_push_combined_lora_rank32_lr1.778e-04_bsz32/checkpoints/model/iter_000002500_fused.pt}"
 VIDEO_CKPT_NAME="${VIDEO_CKPT_NAME:-v2w_push_combined_lora_rank32_iter2500_fused}"
 
-if [[ -z "${HF_TOKEN:-}" ]]; then
-  echo "ERROR: export HF_TOKEN before running (needed for private HF assets)." >&2
-  exit 1
+# HF_TOKEN is only needed for *private* HF repos. The push-that-thing/* and
+# jonpai/mimic-video assets are public, so downloads work anonymously; set the
+# token only if you point this at a private repo.
+if [[ -n "${HF_TOKEN:-}" ]]; then
+  export HF_TOKEN HUGGING_FACE_HUB_TOKEN="$HF_TOKEN"
+else
+  echo "==> HF_TOKEN not set — downloading public HF assets anonymously"
 fi
-export HF_TOKEN HUGGING_FACE_HUB_TOKEN="$HF_TOKEN"
 
 # 1. uv
 if ! command -v uv >/dev/null 2>&1; then
@@ -43,9 +45,19 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 export PATH="$HOME/.local/bin:$PATH"
 
-# 2. submodules (model code + lerobot for hardware I/O)
-echo "==> Initializing submodules"
-git -C "$ROOT_DIR" submodule update --init mimic-video lerobot
+# 2. Submodules: model code (mimic-video) + lerobot for hardware I/O.
+#    A vendored zip already ships these populated, so fetch only when missing —
+#    and only if this is a real git checkout with submodule metadata.
+if [[ -f "$MODEL_DIR/pyproject.toml" && -f "$ROOT_DIR/lerobot/pyproject.toml" ]]; then
+  echo "==> Submodules already present (vendored) — skipping git submodule init"
+elif [[ -f "$ROOT_DIR/.gitmodules" ]] && git -C "$ROOT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  echo "==> Initializing submodules"
+  git -C "$ROOT_DIR" submodule update --init mimic-video lerobot
+else
+  echo "ERROR: submodules not vendored and no git metadata to fetch them." >&2
+  echo "       Populate mimic-video/ and lerobot/ — see README 'Git / submodule setup'." >&2
+  exit 1
+fi
 
 # 3. venv + cosmos deps
 echo "==> uv sync (cu126 cosmos deps) in $MODEL_DIR"

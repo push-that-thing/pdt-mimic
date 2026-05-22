@@ -6,16 +6,48 @@ Run a trained MIMIC video-action model on a real LeRobot **SO-101** arm for the
 ## Run
 
 ```bash
-export HF_TOKEN=hf_...                 # access to the private push-that-thing/* repos
+export HF_TOKEN=hf_...                 # OPTIONAL — only for private HF repos; public ones download without it
 
 bash setup.sh                          # once per machine (~5 min)
 SMOKE=1 bash run_eval_task1.sh         # verify without the arm (load + one inference)
 LIVE=1 ROBOT_PORT=/dev/ttyACM0 ROBOT_ID=my_so101 CAMERA_IDX=0 bash run_eval_task1.sh
 ```
 
+The `push-that-thing/*` and `jonpai/mimic-video` HF assets are **public**, so no
+`HF_TOKEN` is needed — `setup.sh` downloads them anonymously. Set the token only
+if you repoint `HF_MODEL_REPO` (or the T5 caches) at a private repo.
+
 - `run_eval_task2.sh` is identical for task 2.
 - Without `LIVE=1` it's a **dry-run** — prints the deploy command, moves nothing.
 - `setup.sh` runs automatically on the first `run_eval` if the env isn't built.
+
+## Git / submodule setup
+
+This project depends on two git submodules — `mimic-video` (the model code) and
+`lerobot` (hardware I/O, pinned to `v0.4.0`). How you populate them depends on
+how you got the project:
+
+**Received as the submission zip** — the submodules are already **vendored**
+inside `mimic-video/` and `lerobot/` as plain files. Nothing git-related is
+required: `setup.sh` detects the vendored sources and skips submodule fetching.
+Just run `bash setup.sh`.
+
+**Cloned from git** — populate the submodules once:
+
+```bash
+git clone --recurse-submodules <repo-url>
+# …or, in an existing clone:
+git submodule update --init mimic-video lerobot
+```
+
+**Building the submission zip** (maintainer) — populate the submodules first so
+their source travels as plain files, then archive without the heavy rebuilt venv
+and git history:
+
+```bash
+git submodule update --init mimic-video lerobot   # fills mimic-video/ and lerobot/
+zip -r robot_learning_wm.zip . -x '*/.venv/*' -x '.git/*'
+```
 
 ## Configure inference
 
