@@ -29,7 +29,10 @@ fi
 # 1. Ensure a COMPLETE environment. Re-run setup if the venv is missing or
 #    incomplete (the policy plugin can't import) — self-healing, so a half-built
 #    venv never silently breaks the run.
-if ! "$MODEL_DIR/.venv/bin/python" -c "import lerobot_policy_mimic_video" >/dev/null 2>&1; then
+#    Probe from "/" and import a real symbol: the repo root holds a bare
+#    src-layout `lerobot_policy_mimic_video/` dir that Python would otherwise
+#    pick up as an empty namespace package and report a false "installed".
+if ! ( cd / && "$MODEL_DIR/.venv/bin/python" -c "from lerobot_policy_mimic_video import MimicVideoPolicy" ) >/dev/null 2>&1; then
   echo "==> Environment missing or incomplete — running setup.sh"
   bash "$REPO_ROOT/setup.sh"
 fi
