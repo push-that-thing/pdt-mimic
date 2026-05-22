@@ -73,7 +73,27 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
   exit 0
 fi
 
+# Release arm torque on exit — including Ctrl-C. lerobot only disconnects (and
+# thus disables torque via disable_torque_on_disconnect) on a *clean* finish; a
+# Ctrl-C mid-rollout skips it and leaves the follower stiff. The trap fires after
+# the deploy process has exited (freeing the serial port), so the helper can
+# reopen the bus and drop torque. Set RELEASE_TORQUE_ON_EXIT=0 to opt out.
+_torque_released=0
+release_torque() {
+  [[ "${RELEASE_TORQUE_ON_EXIT:-1}" == "1" ]] || return 0
+  [[ "$_torque_released" == "1" ]] && return 0
+  _torque_released=1
+  echo ""
+  echo "==> Releasing arm torque (so you can reposition it by hand)…"
+  python "$SCRIPT_DIR/release_torque.py" --port "$ROBOT_PORT" --id "$ROBOT_ID" \
+    || echo "    WARNING: torque release failed — the arm may still be powered."
+}
+trap release_torque EXIT INT TERM
+
 # Run under the crash-capture logger so a Python traceback, CUDA segfault, or a
 # dropped terminal still leaves the full error in $LOG_DIR (default ~/eval_logs).
+# Not exec'd (unlike before) so the trap above can run after it returns.
 export LOG_TAG="${LOG_TAG:-deploy_so101}"
-exec "$SCRIPT_DIR/run_with_log.sh" "${CMD[@]}"
+status=0
+"$SCRIPT_DIR/run_with_log.sh" "${CMD[@]}" || status=$?
+exit "$status"

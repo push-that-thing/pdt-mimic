@@ -120,12 +120,13 @@ if path.resolve() != target.resolve():
 print(f"Video backbone ready at {target}")
 PY
 
-echo "==> Warming T5 prompt-embedding caches (task_1, task_2)"
+echo "==> Warming T5 prompt-embedding caches (task_1, task_2, task_3_1)"
 python - <<'PY'
 from pathlib import Path
 from huggingface_hub import snapshot_download
 
-for repo, sub in [("push-that-thing/task_1", "task1"), ("push-that-thing/task_2", "task2")]:
+for repo, sub in [("push-that-thing/task_1", "task1"), ("push-that-thing/task_2", "task2"),
+                  ("push-that-thing/task_3_1", "task3_1")]:
     dest = Path.home() / ".cache" / "mimic_lerobot_t5" / sub
     snapshot_download(repo_id=repo, repo_type="dataset", local_dir=str(dest),
                       allow_patterns=[".t5_embeddings/*"])

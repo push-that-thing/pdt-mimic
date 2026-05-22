@@ -51,14 +51,17 @@ if [[ ! -f "$ACTION_CKPT" ]]; then
   rm -rf "$tmp"
 fi
 
+# Remote dir holding the stats cache on $AD_REPO. Per-dataset stats live in
+# their own subdir (e.g. stats_cache_task2merged for push-that-thing/task_2_merged).
+STATS_REMOTE_SUBDIR="${STATS_REMOTE_SUBDIR:-stats_cache}"
 stats_dir="$HOME/.cache/mimic_lerobot_stats"
 STATS_PATH="$stats_dir/$STATS_HASH"
 if [[ ! -f "$STATS_PATH" ]]; then
-  echo "==> Downloading dataset statistics $STATS_HASH"
+  echo "==> Downloading dataset statistics $STATS_HASH (from $STATS_REMOTE_SUBDIR)"
   mkdir -p "$stats_dir"
   tmp="$(mktemp -d)"
-  hf download "$AD_REPO" "action_decoder/stats_cache/$STATS_HASH" --local-dir "$tmp"
-  mv -f "$tmp/action_decoder/stats_cache/$STATS_HASH" "$STATS_PATH"
+  hf download "$AD_REPO" "action_decoder/$STATS_REMOTE_SUBDIR/$STATS_HASH" --local-dir "$tmp"
+  mv -f "$tmp/action_decoder/$STATS_REMOTE_SUBDIR/$STATS_HASH" "$STATS_PATH"
   rm -rf "$tmp"
 fi
 

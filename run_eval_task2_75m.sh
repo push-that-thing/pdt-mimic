@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# Deploy the SO-101 push-that-thing TASK 2 policy.
+# Deploy the SO-101 push-that-thing TASK 2 policy — 75M action decoder.
 #
 #   export HF_TOKEN=hf_...
-#   bash run_eval_task2.sh                       # dry-run (prints the command)
-#   LIVE=1 ROBOT_PORT=/dev/ttyACM0 bash run_eval_task2.sh   # drive the arm
+#   bash run_eval_task2_75m.sh                       # dry-run (prints the command)
+#   LIVE=1 ROBOT_PORT=/dev/ttyACM0 bash run_eval_task2_75m.sh   # drive the arm
 #
 # TODO: set TASK_PROMPT to task-2's exact instruction (it is hash-matched against
 # the T5 cache when use_text_encoder=false). With USE_TEXT_ENCODER=true the prompt
 # is encoded live instead (needs a large GPU for T5).
+#
+# This is the ~75M LoRA decoder (512-dim `so101` net); its HF checkpoint name
+# happens to contain "slow". The larger 125M merged decoder is in
+# run_eval_task2_125m.sh.
 export TASK_PROMPT="${TASK_PROMPT:-Push the white object to the right into the goal white circle. Don’t let the white object and the obstacle in the middle touch.}"
 export ACTION_EXP="${ACTION_EXP:-w2a_so101_task2_slow_136ep_lora32_iter2500_75m_2gpu}"
 export ACTION_ITER="${ACTION_ITER:-1700}"
